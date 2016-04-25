@@ -25,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/core/chaincode/shim"
 	sysccapi "github.com/hyperledger/fabric/core/system_chaincode/api"
 	pb "github.com/hyperledger/fabric/protos"
+	"github.com/hyperledger/fabric/core/ledger"
 )
 
 const (
@@ -142,10 +143,17 @@ func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transactio
 	if err != nil {
 		return nil, fmt.Errorf("Error upgrading %s: %s", cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name, err)
 	}
-
-	// morph the tx into a deploy tx
+	
 	chaincodeName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
 	chaincodeStateKey := constructStateKeyForChaincodeInfo(chaincodeName)
+
+	ledger, err := ledger.GetLedger()
+	if err != nil {
+		return nil, fmt.Errorf("Error upgrading %s: %s", cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name, err)
+	}
+	ledger.CopyState(cus.BaseChaincodeName, chaincodeName)
+
+	// morph the tx into a deploy tx
 	tx.Type = pb.Transaction_CHAINCODE_DEPLOY
 	tx.Payload, err = proto.Marshal(cus.GetChaincodeDeploymentSpec())
 	if err != nil {
