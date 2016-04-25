@@ -92,6 +92,11 @@ message ChaincodeDeploymentSpec {
 
 }
 
+message ChaincodeUpgradeSpec {
+  ChaincodeDeploymentSpec chaincodeDeploymentSpec = 1;
+  string baseChaincodeName = 2;
+}
+
 // Carries the chaincode function and its arguments.
 message ChaincodeInvocationSpec {
 

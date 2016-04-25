@@ -36,6 +36,8 @@ message Transaction {
         CHAINCODE_QUERY = 3;
         // terminate a chaincode; not implemented yet
         CHAINCODE_TERMINATE = 4;
+        // upgrades a chaincode
+        CHAINCODE_UPGRADE = 5;
     }
     Type type = 1;
     //store ChaincodeID as bytes so its encrypted value can be stored

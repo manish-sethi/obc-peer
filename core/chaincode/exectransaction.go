@@ -53,21 +53,23 @@ func execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction, c
 		}
 	}
 
-	if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
-		_, err := chain.Deploy(ctxt, t)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
-		}
-
-		//launch and wait for ready
-		markTxBegin(lgr, t)
-		_, _, err = chain.Launch(ctxt, t)
-		if err != nil {
-			markTxFinish(lgr, t, false)
-			return nil, fmt.Errorf("%s", err)
-		}
-		markTxFinish(lgr, t, true)
-	} else if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
+	// if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
+	// 	_, err := chain.Deploy(ctxt, t)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
+	// 	}
+	//
+	// 	//launch and wait for ready
+	// 	markTxBegin(lgr, t)
+	// 	_, _, err = chain.Launch(ctxt, t)
+	// 	if err != nil {
+	// 		markTxFinish(lgr, t, false)
+	// 		return nil, fmt.Errorf("%s", err)
+	// 	}
+	// 	markTxFinish(lgr, t, true)
+	// } else
+	//
+	if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
 		//will launch if necessary (and wait for ready)
 		cID, cMsg, err := chain.Launch(ctxt, t)
 		if err != nil {
@@ -137,10 +139,10 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 	return execute(ctxt, chain, t, true)
 }
 
-//ExecuteWithoutCommit is used when an outer commit is in progress.
-func ExecuteWithoutCommit(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
-	return execute(ctxt, chain, t, false)
-}
+// //ExecuteWithoutCommit is used when an outer commit is in progress.
+// func ExecuteWithoutCommit(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
+// 	return execute(ctxt, chain, t, false)
+// }
 
 //ExecuteTransactions - will execute transactions on the array one by one
 //will return an array of errors one for each transaction. If the execution

@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
-	pb "github.com/hyperledger/fabric/protos"
 	sysccapi "github.com/hyperledger/fabric/core/system_chaincode/api"
+	pb "github.com/hyperledger/fabric/protos"
 )
 
 const (
@@ -36,31 +36,35 @@ const (
 	GETTRAN = "get-transaction"
 )
 
-
 //errors
 type InvalidFunctionErr string
+
 func (f InvalidFunctionErr) Error() string {
-    return fmt.Sprintf("invalid function to uber %s", string(f))
+	return fmt.Sprintf("invalid function to uber %s", string(f))
 }
 
 type InvalidArgsLenErr int
+
 func (i InvalidArgsLenErr) Error() string {
-    return fmt.Sprintf("invalid number of argument to uber %d", int(i))
+	return fmt.Sprintf("invalid number of argument to uber %d", int(i))
 }
 
 type InvalidArgsErr int
+
 func (i InvalidArgsErr) Error() string {
-    return fmt.Sprintf("invalid argument (%d) to uber", int(i))
+	return fmt.Sprintf("invalid argument (%d) to uber", int(i))
 }
 
 type TXExistsErr string
+
 func (t TXExistsErr) Error() string {
-    return fmt.Sprintf("transaction exists %s", string(t))
+	return fmt.Sprintf("transaction exists %s", string(t))
 }
 
 type TXNotFoundErr string
+
 func (t TXNotFoundErr) Error() string {
-    return fmt.Sprintf("transaction not found %s", string(t))
+	return fmt.Sprintf("transaction not found %s", string(t))
 }
 
 // UberSysCC implements chaincode lifecycle and policies aroud it
@@ -77,14 +81,24 @@ func (t *UberSysCC) Invoke(stub *shim.ChaincodeStub, function string, args []str
 		return nil, InvalidFunctionErr(function)
 	}
 
-	tx,txbytes,err := sysccapi.GetTransaction(args)
+	tx, txbytes, err := sysccapi.GetTransaction(args)
 
 	if err != nil {
 		return nil, err
 	}
 
+	switch tx.Type {
+	case pb.Transaction_CHAINCODE_UPGRADE:
+		return t.upgradeChaincode(stub, tx, txbytes)
+	case pb.Transaction_CHAINCODE_DEPLOY:
+		return t.deployChaincode(stub, tx, txbytes)
+	}
+	return nil, nil
+}
+
+func (t *UberSysCC) deployChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction, txBytes []byte) ([]byte, error) {
 	cds := &pb.ChaincodeDeploymentSpec{}
-	err = proto.Unmarshal(tx.Payload, cds)
+	err := proto.Unmarshal(tx.Payload, cds)
 	if err != nil {
 		return nil, err
 	}
@@ -95,18 +109,61 @@ func (t *UberSysCC) Invoke(stub *shim.ChaincodeStub, function string, args []str
 	}
 
 	err = sysccapi.Deploy(tx)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("Error deploying %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
 	}
 
-	err = stub.PutState(cds.ChaincodeSpec.ChaincodeID.Name, txbytes)
+	err = stub.PutState(cds.ChaincodeSpec.ChaincodeID.Name, txBytes)
 	if err != nil {
 		return nil, fmt.Errorf("PutState failed for %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
 	}
 
+	err = stub.PutState(constructStateKeyForChaincodeInfo(cds.ChaincodeSpec.ChaincodeID.Name), []byte("Construct a proto message for storing state|mode|base-chaincode"))
+	if err != nil {
+		return nil, fmt.Errorf("PutState failed for info of %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
+	}
+
 	fmt.Printf("Successfully deployed ;-)\n")
 
+	return nil, err
+}
+
+func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction, txBytes []byte) ([]byte, error) {
+	cus := &pb.ChaincodeUpgradeSpec{}
+	err := proto.Unmarshal(tx.Payload, cus)
+	if err != nil {
+		return nil, err
+	}
+	baseCCInfoBytes, err := stub.GetState(constructStateKeyForChaincodeInfo(cus.BaseChaincodeName))
+	if baseCCInfoBytes == nil {
+		return nil, fmt.Errorf("Base chaincode [%s] does not exist", cus.BaseChaincodeName)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("Error upgrading %s: %s", cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name, err)
+	}
+
+	// morph the tx into a deploy tx
+	chaincodeName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+	chaincodeStateKey := constructStateKeyForChaincodeInfo(chaincodeName)
+	tx.Type = pb.Transaction_CHAINCODE_DEPLOY
+	tx.Payload, err = proto.Marshal(cus.GetChaincodeDeploymentSpec())
+	if err != nil {
+		return nil, fmt.Errorf("Error upgrading %s: %s", chaincodeName, err)
+	}
+	txBytes, err = proto.Marshal(tx)
+	if err != nil {
+		return nil, fmt.Errorf("Error upgrading %s: %s", chaincodeName, err)
+	}
+
+	t.deployChaincode(stub, tx, txBytes)
+	b, err := stub.GetState(chaincodeStateKey)
+	if err != nil {
+		return nil, fmt.Errorf("Error in getting state during upgrade of %s: %s", chaincodeName, err)
+	}
+	// add base chaincode name to 'b'
+	// b = b + BaseChaincodeName
+	err = stub.PutState(chaincodeStateKey, b)
 	return nil, err
 }
 
@@ -126,4 +183,8 @@ func (t *UberSysCC) Query(stub *shim.ChaincodeStub, function string, args []stri
 	}
 
 	return []byte(fmt.Sprintf("Found pb.Transaction for %s", args[0])), nil
+}
+
+func constructStateKeyForChaincodeInfo(chaincodeName string) string {
+	return fmt.Sprintf("%s_%s", chaincodeName, "info")
 }

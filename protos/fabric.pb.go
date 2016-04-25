@@ -31,6 +31,8 @@ const (
 	Transaction_CHAINCODE_QUERY Transaction_Type = 3
 	// terminate a chaincode; not implemented yet
 	Transaction_CHAINCODE_TERMINATE Transaction_Type = 4
+	// upgrades a chaincode
+	Transaction_CHAINCODE_UPGRADE Transaction_Type = 5
 )
 
 var Transaction_Type_name = map[int32]string{
@@ -39,6 +41,7 @@ var Transaction_Type_name = map[int32]string{
 	2: "CHAINCODE_INVOKE",
 	3: "CHAINCODE_QUERY",
 	4: "CHAINCODE_TERMINATE",
+	5: "CHAINCODE_UPGRADE",
 }
 var Transaction_Type_value = map[string]int32{
 	"UNDEFINED":           0,
@@ -46,6 +49,7 @@ var Transaction_Type_value = map[string]int32{
 	"CHAINCODE_INVOKE":    2,
 	"CHAINCODE_QUERY":     3,
 	"CHAINCODE_TERMINATE": 4,
+	"CHAINCODE_UPGRADE":   5,
 }
 
 func (x Transaction_Type) String() string {

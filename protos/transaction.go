@@ -92,6 +92,29 @@ func NewChaincodeDeployTransaction(chaincodeDeploymentSpec *ChaincodeDeploymentS
 	return transaction, nil
 }
 
+// NewChaincodeUpgradeTransaction constructs a transaction for upgrading a chaincode
+func NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec *ChaincodeUpgradeSpec, uuid string) (*Transaction, error) {
+	transaction := new(Transaction)
+	transaction.Type = Transaction_CHAINCODE_UPGRADE
+	transaction.Uuid = uuid
+	transaction.Timestamp = util.CreateUtcTimestamp()
+	cID := chaincodeUpgradeSpec.ChaincodeDeploymentSpec.ChaincodeSpec.GetChaincodeID()
+	if cID != nil {
+		data, err := proto.Marshal(cID)
+		if err != nil {
+			return nil, fmt.Errorf("Could not marshal chaincode : %s", err)
+		}
+		transaction.ChaincodeID = data
+	}
+	data, err := proto.Marshal(chaincodeUpgradeSpec)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error mashalling payload for chaincode deployment: %s", err))
+		return nil, fmt.Errorf("Could not marshal payload for chaincode deployment: %s", err)
+	}
+	transaction.Payload = data
+	return transaction, nil
+}
+
 // NewChaincodeExecute is used to deploy chaincode.
 func NewChaincodeExecute(chaincodeInvocationSpec *ChaincodeInvocationSpec, uuid string, typ Transaction_Type) (*Transaction, error) {
 	transaction := new(Transaction)

@@ -161,7 +161,7 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	}
 
 	if sysccapi.UseUber() {
-		tx, err = d.deployViaUber(chaincodeDeploymentSpec, tx)
+		tx, err = d.wrapInUberTransaction(tx)
 		if err != nil {
 			return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 		}
@@ -176,6 +176,30 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	}
 
 	return chaincodeDeploymentSpec, err
+}
+
+func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec, baseChaincode string) (*pb.ChaincodeUpgradeSpec, error) {
+	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
+
+	if err != nil {
+		devopsLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
+		return nil, err
+	}
+
+	// Now create the Transactions message and send to Peer.
+	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+	chaincodeUpgradeSpec := &pb.ChaincodeUpgradeSpec{ChaincodeDeploymentSpec:chaincodeDeploymentSpec, BaseChaincodeName:baseChaincode}
+	var tx *pb.Transaction
+	devopsLogger.Debug("Creating deployment transaction (%s)", transID)
+	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec, transID)
+	if err != nil {
+		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
+	}
+	tx, err = d.wrapInUberTransaction(tx)
+	if err != nil {
+		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
+	}
+	return chaincodeUpgradeSpec, err
 }
 
 func (d *Devops) invokeOrQuery(ctx context.Context, chaincodeInvocationSpec *pb.ChaincodeInvocationSpec, invoke bool) (*pb.Response, error) {
@@ -281,7 +305,7 @@ func CheckSpec(spec *pb.ChaincodeSpec) error {
 }
 
 //--------- UBER funcs -------------
-func (d *Devops) deployViaUber(cds *pb.ChaincodeDeploymentSpec, tx *pb.Transaction) (*pb.Transaction, error) {
+func (d *Devops) wrapInUberTransaction(tx *pb.Transaction) (*pb.Transaction, error) {
 	var outertx *pb.Transaction
 	var err error
 

@@ -39,7 +39,7 @@ var sysccLogger = logging.MustGetLogger("sysccapi")
 
 var uberUp bool
 
-// RegisterSysCC registers a system chaincode with the given path 
+// RegisterSysCC registers a system chaincode with the given path
 func RegisterSysCC(path string, o interface{}) error {
 	syscc := o.(shim.Chaincode)
 	if syscc == nil {
@@ -88,7 +88,7 @@ func GetTransaction(args []string) (*pb.Transaction, []byte, error) {
 		return nil, nil, fmt.Errorf("Error decoding chaincode deployment spec %s", err)
 	}
 
-	
+
 	t := &pb.Transaction{}
 
 	//TODO: need to use crypto decrypt t when using security
@@ -103,6 +103,16 @@ func GetTransaction(args []string) (*pb.Transaction, []byte, error) {
 }
 
 func Deploy(t *pb.Transaction) error {
-	_, err := chaincode.ExecuteWithoutCommit(context.Background(), chaincode.GetChain(chaincode.DefaultChain), t)
-	return err
+	chaincodeSupport := chaincode.GetChain(chaincode.DefaultChain)
+	ctxt := context.Background()
+	_, err := chaincodeSupport.DeployChaincode(ctxt, t)
+	if err != nil {
+		return fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
+	}
+	//launch and wait for ready
+	_, _, err = chaincodeSupport.LaunchChaincode(ctxt, t)
+	if err != nil {
+		return fmt.Errorf("%s", err)
+	}
+	return nil
 }
