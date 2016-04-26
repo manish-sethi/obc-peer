@@ -37,32 +37,34 @@ const (
 
 var sysccLogger = logging.MustGetLogger("sysccapi")
 
+var registeredSystemCCs = make(map[string]string)
+
 var uberUp bool
 
 // RegisterSysCC registers a system chaincode with the given path
-func RegisterSysCC(path string, o interface{}) error {
+func RegisterSysCC(name string, path string, o interface{}) error {
 	syscc := o.(shim.Chaincode)
 	if syscc == nil {
 		sysccLogger.Warning(fmt.Sprintf("invalid chaincode %v", o))
 		return fmt.Errorf(fmt.Sprintf("invalid chaincode %v", o))
 	}
+	if _,ok := registeredSystemCCs[name]; ok {
+		return fmt.Errorf(fmt.Sprintf("syscc %s already registered", name))
+	}
 	err := inproc.Register(path, syscc)
 	if err != nil {
 		return fmt.Errorf(fmt.Sprintf("could not register (%s,%v): %s", path, syscc, err))
 	}
+	registeredSystemCCs[name] = path
 	sysccLogger.Debug("system chaincode %s registered", path)
 	return err
 }
 
-//SetUberUp sets uber is up or not
-func SetUberUp(val bool) {
-	uberUp = val
-}
-
-//UseUber should user be used
-func UseUber() bool {
-	//we really need a "policy" here... but for now use uber if its up
-	return uberUp
+func IsSystemCC(name string) bool {
+	if _,ok := registeredSystemCCs[name]; ok {
+		return true
+	}
+	return false
 }
 
 //GetTransaction returns a transaction given args

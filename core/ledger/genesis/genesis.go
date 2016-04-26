@@ -29,7 +29,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protos"
 	"github.com/op/go-logging"
-	sysccapi "github.com/hyperledger/fabric/core/system_chaincode/api"
 )
 
 var genesisLogger = logging.MustGetLogger("genesis")
@@ -165,10 +164,6 @@ func MakeGenesis() error {
 				}
 
 				genesisTransactions = append(genesisTransactions, transaction)
-
-				if name == sysccapi.UBER {
-					sysccapi.SetUberUp(true)
-				}
 
 			} //for
 

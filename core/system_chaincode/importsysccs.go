@@ -26,7 +26,8 @@ import (
 )
 
 //RegisterSysCCs is the hook for system chaincodes where system chaincodes are registered with the fabric
-//note the chaincode must still be deployed and launched like a user chaincode will be
+//note 1 -  the chaincode must still be deployed and launched like a user chaincode will be
+//note 2 -  if registered in genesis block, the name and path should match genesis block definition
 func RegisterSysCCs() {
-	api.RegisterSysCC("github.com/hyperledger/fabric/core/system_chaincode/uber", &uber.UberSysCC{})
+	api.RegisterSysCC("uber", "github.com/hyperledger/fabric/core/system_chaincode/uber", &uber.UberSysCC{})
 }

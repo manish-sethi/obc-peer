@@ -127,49 +127,21 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
 
 	var tx *pb.Transaction
-	var sec crypto.Client
 
-	if peer.SecurityEnabled() {
-		if devopsLogger.IsEnabledFor(logging.DEBUG) {
-			devopsLogger.Debug("Initializing secure devops using context %s", spec.SecureContext)
-		}
-		sec, err = crypto.InitClient(spec.SecureContext, nil)
-		defer crypto.CloseClient(sec)
+	devopsLogger.Debug("Creating deployment transaction (%s)", transID)
 
-		// remove the security context since we are no longer need it down stream
-		spec.SecureContext = ""
-
-		if nil != err {
-			return nil, err
-		}
-
-		if devopsLogger.IsEnabledFor(logging.DEBUG) {
-			devopsLogger.Debug("Creating secure transaction %s", transID)
-		}
-		tx, err = sec.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, transID)
-		if nil != err {
-			return nil, err
-		}
-	} else {
-		if devopsLogger.IsEnabledFor(logging.DEBUG) {
-			devopsLogger.Debug("Creating deployment transaction (%s)", transID)
-		}
-		tx, err = pb.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, transID)
-		if err != nil {
-			return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
-		}
+	tx, err = pb.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, transID)
+	if err != nil {
+		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 	}
 
-	if sysccapi.UseUber() {
-		tx, err = d.wrapInUberTransaction(tx)
-		if err != nil {
-			return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
-		}
+	tx, err = d.wrapInUberTransaction(tx)
+	if err != nil {
+		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 	}
 
-	if devopsLogger.IsEnabledFor(logging.DEBUG) {
-		devopsLogger.Debug("Sending deploy transaction (%s) to validator", tx.Uuid)
-	}
+	devopsLogger.Debug("Sending deploy transaction (%s) to validator", tx.Uuid)
+
 	resp := d.coord.ExecuteTransaction(tx)
 	if resp.Status == pb.Response_FAILURE {
 		err = fmt.Errorf(string(resp.Msg))
