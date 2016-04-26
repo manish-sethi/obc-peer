@@ -91,6 +91,8 @@ type DevopsClient interface {
 	Invoke(ctx context.Context, in *ChaincodeInvocationSpec, opts ...grpc.CallOption) (*Response, error)
 	// Invoke chaincode.
 	Query(ctx context.Context, in *ChaincodeInvocationSpec, opts ...grpc.CallOption) (*Response, error)
+	// Upgrade the chaincode package to the chain.
+	Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeUpgradeSpec, error)
 }
 
 type devopsClient struct {
@@ -146,6 +148,15 @@ func (c *devopsClient) Query(ctx context.Context, in *ChaincodeInvocationSpec, o
 	return out, nil
 }
 
+func (c *devopsClient) Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeUpgradeSpec, error) {
+	out := new(ChaincodeUpgradeSpec)
+	err := grpc.Invoke(ctx, "/protos.Devops/Upgrade", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Devops service
 
 type DevopsServer interface {
@@ -160,6 +171,8 @@ type DevopsServer interface {
 	Invoke(context.Context, *ChaincodeInvocationSpec) (*Response, error)
 	// Invoke chaincode.
 	Query(context.Context, *ChaincodeInvocationSpec) (*Response, error)
+	// Upgrade the chaincode package to the chain.
+	Upgrade(context.Context, *ChaincodeSpec) (*ChaincodeUpgradeSpec, error)
 }
 
 func RegisterDevopsServer(s *grpc.Server, srv DevopsServer) {
@@ -226,6 +239,18 @@ func _Devops_Query_Handler(srv interface{}, ctx context.Context, dec func(interf
 	return out, nil
 }
 
+func _Devops_Upgrade_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(ChaincodeSpec)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(DevopsServer).Upgrade(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _Devops_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "protos.Devops",
 	HandlerType: (*DevopsServer)(nil),
@@ -249,6 +274,10 @@ var _Devops_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Query",
 			Handler:    _Devops_Query_Handler,
+		},
+		{
+			MethodName: "Upgrade",
+			Handler:    _Devops_Upgrade_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{},

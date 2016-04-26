@@ -147,26 +147,32 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	return chaincodeDeploymentSpec, err
 }
 
-func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec, parentChaincode string) (*pb.ChaincodeUpgradeSpec, error) {
+func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeUpgradeSpec, error) {
+	if spec.ChaincodeID.Parent == "" {
+		err := fmt.Errorf("Parent missing in upgrade chaincode spec: %v", spec)
+		devopsLogger.Error(fmt.Sprintf("%s", err))
+		return nil, err
+	}
+
 	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
 
 	if err != nil {
-		devopsLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
+		devopsLogger.Error(fmt.Sprintf("Error upgrading chaincode spec: %v\n\n error: %s", spec, err))
 		return nil, err
 	}
 
 	// Now create the Transactions message and send to Peer.
 	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-	chaincodeUpgradeSpec := &pb.ChaincodeUpgradeSpec{ChaincodeDeploymentSpec: chaincodeDeploymentSpec, ParentChaincodeName: parentChaincode}
+	chaincodeUpgradeSpec := &pb.ChaincodeUpgradeSpec{ChaincodeDeploymentSpec: chaincodeDeploymentSpec}
 	var tx *pb.Transaction
-	devopsLogger.Debug("Creating deployment transaction (%s)", transID)
+	devopsLogger.Debug("Creating upgrade transaction (%s)", transID)
 	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec, transID)
 	if err != nil {
-		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
+		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
 	}
 	tx, err = uber.Wrap(tx)
 	if err != nil {
-		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
+		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
 	}
 	return chaincodeUpgradeSpec, err
 }

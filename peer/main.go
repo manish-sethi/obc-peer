@@ -167,14 +167,15 @@ var (
 
 // Chaincode-related variables.
 var (
-	chaincodeLang     string
-	chaincodeCtorJSON string
-	chaincodePath     string
-	chaincodeName     string
-	chaincodeDevMode  bool
-	chaincodeUsr      string
-	chaincodeQueryRaw bool
-	chaincodeQueryHex bool
+	chaincodeLang       string
+	chaincodeCtorJSON   string
+	chaincodePath       string
+	chaincodeName       string
+	chaincodeDevMode    bool
+	chaincodeUsr        string
+	chaincodeQueryRaw   bool
+	chaincodeQueryHex   bool
+	chaincodeParentName string
 )
 
 var chaincodeCmd = &cobra.Command{
@@ -187,6 +188,16 @@ var chaincodeCmd = &cobra.Command{
 }
 
 var chaincodePathArgumentSpecifier = fmt.Sprintf("%s_PATH", strings.ToUpper(chainFuncName))
+
+var chaincodeUpgradeCmd = &cobra.Command{
+	Use:       "upgrade",
+	Short:     fmt.Sprintf("Upgrade the specified %s to the network.", chainFuncName),
+	Long:      fmt.Sprintf(`Upgrade the specified %s to the network.`, chainFuncName),
+	ValidArgs: []string{"1"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return chaincodeUpgrade(cmd, args)
+	},
+}
 
 var chaincodeDeployCmd = &cobra.Command{
 	Use:       "deploy",
@@ -289,6 +300,9 @@ func main() {
 	chaincodeQueryCmd.Flags().BoolVarP(&chaincodeQueryRaw, "raw", "r", false, "If true, output the query value as raw bytes, otherwise format as a printable string")
 	chaincodeQueryCmd.Flags().BoolVarP(&chaincodeQueryHex, "hex", "x", false, "If true, output the query value byte array in hexadecimal. Incompatible with --raw")
 
+	chaincodeCmd.PersistentFlags().StringVarP(&chaincodeParentName, "parentname", "P", undefinedParamValue, fmt.Sprintf("Name of the parent chaincode for the deploy transaction"))
+
+	chaincodeCmd.AddCommand(chaincodeUpgradeCmd)
 	chaincodeCmd.AddCommand(chaincodeDeployCmd)
 	chaincodeCmd.AddCommand(chaincodeInvokeCmd)
 	chaincodeCmd.AddCommand(chaincodeQueryCmd)
@@ -831,6 +845,85 @@ func chaincodeDeploy(cmd *cobra.Command, args []string) (err error) {
 	}
 	logger.Info("Deploy result: %s", chaincodeDeploymentSpec.ChaincodeSpec)
 	fmt.Println(chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name)
+	return nil
+}
+
+// chaincodeUpgrade upgrades the chaincode. On success, the chaincode name
+// (hash) is printed to STDOUT for use by subsequent chaincode-related CLI
+// commands.
+func chaincodeUpgrade(cmd *cobra.Command, args []string) (err error) {
+	if err = checkChaincodeCmdParams(cmd); err != nil {
+		return
+	}
+
+	if chaincodeParentName == undefinedParamValue {
+		err = fmt.Errorf("Must supply value for %s parent chaincode name parameter.\n", chainFuncName)
+		return
+	}
+
+	devopsClient, err := getDevopsClient(cmd)
+	if err != nil {
+		err = fmt.Errorf("Error building %s: %s", chainFuncName, err)
+		return
+	}
+	// Build the spec
+	input := &pb.ChaincodeInput{}
+	if err = json.Unmarshal([]byte(chaincodeCtorJSON), &input); err != nil {
+		err = fmt.Errorf("Chaincode argument error: %s", err)
+		return
+	}
+	chaincodeLang = strings.ToUpper(chaincodeLang)
+	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value[chaincodeLang]),
+		ChaincodeID: &pb.ChaincodeID{Path: chaincodePath, Name: chaincodeName, Parent: chaincodeParentName}, CtorMsg: input}
+
+	// If security is enabled, add client login token
+	if viper.GetBool("security.enabled") {
+		logger.Debug("Security is enabled. Include security context in deploy spec")
+		if chaincodeUsr == undefinedParamValue {
+			err = errors.New("Must supply username for chaincode when security is enabled")
+			return
+		}
+
+		// Retrieve the CLI data storage path
+		// Returns /var/openchain/production/client/
+		localStore := getCliFilePath()
+
+		// Check if the user is logged in before sending transaction
+		if _, err = os.Stat(localStore + "loginToken_" + chaincodeUsr); err == nil {
+			logger.Info("Local user '%s' is already logged in. Retrieving login token.\n", chaincodeUsr)
+
+			// Read in the login token
+			token, err := ioutil.ReadFile(localStore + "loginToken_" + chaincodeUsr)
+			if err != nil {
+				panic(fmt.Errorf("Fatal error when reading client login token: %s\n", err))
+			}
+
+			// Add the login token to the chaincodeSpec
+			spec.SecureContext = string(token)
+
+			// If privacy is enabled, mark chaincode as confidential
+			if viper.GetBool("security.privacy") {
+				logger.Info("Set confidentiality level to CONFIDENTIAL.\n")
+				spec.ConfidentialityLevel = pb.ConfidentialityLevel_CONFIDENTIAL
+			}
+		} else {
+			// Check if the token is not there and fail
+			if os.IsNotExist(err) {
+				err = fmt.Errorf("User '%s' not logged in. Use the 'login' command to obtain a security token.", chaincodeUsr)
+				return
+			}
+			// Unexpected error
+			panic(fmt.Errorf("Fatal error when checking for client login token: %s\n", err))
+		}
+	}
+
+	chaincodeUpgradeSpec, err := devopsClient.Upgrade(context.Background(), spec)
+	if err != nil {
+		err = fmt.Errorf("Error building %s: %s\n", chainFuncName, err)
+		return
+	}
+	logger.Info("Upgrade result: %s", chaincodeUpgradeSpec.ChaincodeDeploymentSpec.ChaincodeSpec)
+	fmt.Println(chaincodeUpgradeSpec.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name)
 	return nil
 }
 

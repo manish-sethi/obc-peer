@@ -141,7 +141,7 @@ func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transactio
 	}
 
 	ccName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-	parentCCName := cus.ParentChaincodeName
+	parentCCName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Parent
 	parentCCInfoBytes, err := getChaincodeInfo(stub, parentCCName)
 	if parentCCInfoBytes == nil {
 		return nil, fmt.Errorf("Parent chaincode [%s] does not exist", parentCCName)
