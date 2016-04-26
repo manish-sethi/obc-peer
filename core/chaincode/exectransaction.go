@@ -31,17 +31,14 @@ import (
 	pb "github.com/hyperledger/fabric/protos"
 )
 
-func execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction, commit bool) ([]byte, error) {
+func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
 	var err error
 	var lgr *ledger.Ledger
 
-	//if executing on behalf of a Uber transaction, we should not commit
-	if commit {
-		// get a handle to ledger to mark the begin/finish of a tx
-		lgr, err = ledger.GetLedger()
-		if err != nil {
-			return nil, fmt.Errorf("Failed to get handle to ledger (%s)", err)
-		}
+	// get a handle to ledger to mark the begin/finish of a tx
+	lgr, err = ledger.GetLedger()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to get handle to ledger (%s)", err)
 	}
 
 	if secHelper := chain.getSecHelper(); nil != secHelper {
@@ -53,23 +50,23 @@ func execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction, c
 		}
 	}
 
-	// if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
-	// 	_, err := chain.Deploy(ctxt, t)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
-	// 	}
-	//
-	// 	//launch and wait for ready
-	// 	markTxBegin(lgr, t)
-	// 	_, _, err = chain.Launch(ctxt, t)
-	// 	if err != nil {
-	// 		markTxFinish(lgr, t, false)
-	// 		return nil, fmt.Errorf("%s", err)
-	// 	}
-	// 	markTxFinish(lgr, t, true)
-	// } else
-	//
-	if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
+	//deploy is needed only for system chaincodes. User chaincodes are deployed by
+	//uber chaincode
+	if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
+	 	_, err := chain.Deploy(ctxt, t)
+	 	if err != nil {
+	 		return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
+	 	}
+	
+	 	//launch and wait for ready
+	 	markTxBegin(lgr, t)
+	 	_, _, err = chain.Launch(ctxt, t)
+	 	if err != nil {
+	 		markTxFinish(lgr, t, false)
+	 		return nil, fmt.Errorf("%s", err)
+	 	}
+	 	markTxFinish(lgr, t, true)
+	 } else if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
 		//will launch if necessary (and wait for ready)
 		cID, cMsg, err := chain.Launch(ctxt, t)
 		if err != nil {
@@ -134,16 +131,6 @@ func execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction, c
 	return nil, err
 }
 
-//Execute - execute transaction or a query
-func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
-	return execute(ctxt, chain, t, true)
-}
-
-// //ExecuteWithoutCommit is used when an outer commit is in progress.
-// func ExecuteWithoutCommit(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
-// 	return execute(ctxt, chain, t, false)
-// }
-
 //ExecuteTransactions - will execute transactions on the array one by one
 //will return an array of errors one for each transaction. If the execution
 //succeeded, array element will be nil. returns state hash
@@ -203,19 +190,15 @@ func getTimeout(cID *pb.ChaincodeID) (time.Duration, error) {
 }
 
 func markTxBegin(ledger *ledger.Ledger, t *pb.Transaction) {
-	if ledger != nil {
-		if t.Type == pb.Transaction_CHAINCODE_QUERY {
-			return
-		}
-		ledger.TxBegin(t.Uuid)
+	if t.Type == pb.Transaction_CHAINCODE_QUERY {
+		return
 	}
+	ledger.TxBegin(t.Uuid)
 }
 
 func markTxFinish(ledger *ledger.Ledger, t *pb.Transaction, successful bool) {
-	if ledger != nil {
-		if t.Type == pb.Transaction_CHAINCODE_QUERY {
-			return
-		}
-		ledger.TxFinished(t.Uuid, successful)
+	if t.Type == pb.Transaction_CHAINCODE_QUERY {
+		return
 	}
+	ledger.TxFinished(t.Uuid, successful)
 }
