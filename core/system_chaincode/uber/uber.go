@@ -23,10 +23,13 @@ import (
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/chaincode/shim"
+	"github.com/hyperledger/fabric/core/ledger"
 	sysccapi "github.com/hyperledger/fabric/core/system_chaincode/api"
 	pb "github.com/hyperledger/fabric/protos"
-	"github.com/hyperledger/fabric/core/ledger"
+	"github.com/op/go-logging"
 )
+
+var logger = logging.MustGetLogger("uber")
 
 const (
 	DEPLOY  = "deploy"
@@ -104,8 +107,8 @@ func (t *UberSysCC) deployChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction
 		return nil, err
 	}
 
-	barr, err := stub.GetState(cds.ChaincodeSpec.ChaincodeID.Name)
-	if barr != nil {
+	ccInfoBytes, err := stub.GetState(cds.ChaincodeSpec.ChaincodeID.Name)
+	if ccInfoBytes != nil {
 		return nil, TXExistsErr(cds.ChaincodeSpec.ChaincodeID.Name)
 	}
 
@@ -115,18 +118,18 @@ func (t *UberSysCC) deployChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction
 		return nil, fmt.Errorf("Error deploying %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
 	}
 
-	err = stub.PutState(cds.ChaincodeSpec.ChaincodeID.Name, txBytes)
+	err = stub.PutState(constructChaincodeBytesKey(cds.ChaincodeSpec.ChaincodeID.Name), txBytes)
 	if err != nil {
 		return nil, fmt.Errorf("PutState failed for %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
 	}
 
-	err = stub.PutState(constructStateKeyForChaincodeInfo(cds.ChaincodeSpec.ChaincodeID.Name), []byte("Construct a proto message for storing state|mode|base-chaincode"))
+	ccInfo := &ChaincodeInfo{}
+	err = putChaincodeInfo(stub, cds.ChaincodeSpec.ChaincodeID.Name, ccInfo)
 	if err != nil {
 		return nil, fmt.Errorf("PutState failed for info of %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
 	}
 
 	fmt.Printf("Successfully deployed ;-)\n")
-
 	return nil, err
 }
 
@@ -136,42 +139,44 @@ func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transactio
 	if err != nil {
 		return nil, err
 	}
-	baseCCInfoBytes, err := stub.GetState(constructStateKeyForChaincodeInfo(cus.BaseChaincodeName))
-	if baseCCInfoBytes == nil {
-		return nil, fmt.Errorf("Base chaincode [%s] does not exist", cus.BaseChaincodeName)
+
+	ccName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+	parentCCName := cus.ParentChaincodeName
+	parentCCInfoBytes, err := getChaincodeInfo(stub, parentCCName)
+	if parentCCInfoBytes == nil {
+		return nil, fmt.Errorf("Parent chaincode [%s] does not exist", parentCCName)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("Error upgrading %s: %s", cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name, err)
+		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
 	}
-	
-	chaincodeName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-	chaincodeStateKey := constructStateKeyForChaincodeInfo(chaincodeName)
 
 	ledger, err := ledger.GetLedger()
 	if err != nil {
-		return nil, fmt.Errorf("Error upgrading %s: %s", cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name, err)
+		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
 	}
-	ledger.CopyState(cus.BaseChaincodeName, chaincodeName)
+	ledger.CopyState(parentCCName, ccName)
 
 	// morph the tx into a deploy tx
 	tx.Type = pb.Transaction_CHAINCODE_DEPLOY
-	tx.Payload, err = proto.Marshal(cus.GetChaincodeDeploymentSpec())
+	tx.Payload, err = proto.Marshal(cus.ChaincodeDeploymentSpec)
 	if err != nil {
-		return nil, fmt.Errorf("Error upgrading %s: %s", chaincodeName, err)
+		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
 	}
 	txBytes, err = proto.Marshal(tx)
 	if err != nil {
-		return nil, fmt.Errorf("Error upgrading %s: %s", chaincodeName, err)
+		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
 	}
 
 	t.deployChaincode(stub, tx, txBytes)
-	b, err := stub.GetState(chaincodeStateKey)
+	ccInfo, err := getChaincodeInfo(stub, ccName)
 	if err != nil {
-		return nil, fmt.Errorf("Error in getting state during upgrade of %s: %s", chaincodeName, err)
+		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
 	}
-	// add base chaincode name to 'b'
-	// b = b + BaseChaincodeName
-	err = stub.PutState(chaincodeStateKey, b)
+	ccInfo.ParentChaincodeName = parentCCName
+	err = putChaincodeInfo(stub, ccName, ccInfo)
+	if err != nil {
+		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
+	}
 	return nil, err
 }
 
@@ -193,6 +198,27 @@ func (t *UberSysCC) Query(stub *shim.ChaincodeStub, function string, args []stri
 	return []byte(fmt.Sprintf("Found pb.Transaction for %s", args[0])), nil
 }
 
-func constructStateKeyForChaincodeInfo(chaincodeName string) string {
-	return fmt.Sprintf("%s_%s", chaincodeName, "info")
+func getChaincodeInfo(stub *shim.ChaincodeStub, chaincodeName string) (*ChaincodeInfo, error) {
+	buf, err := stub.GetState(chaincodeName)
+	if err != nil{
+		return nil, err
+	}
+	chaincodeInfo := &ChaincodeInfo{}
+	err = proto.Unmarshal(buf, chaincodeInfo)
+	if err != nil{
+		return nil, err
+	}
+	return chaincodeInfo, nil
+}
+
+func putChaincodeInfo(stub *shim.ChaincodeStub, chaincodeName string, info *ChaincodeInfo) error {
+	buf, err := proto.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return stub.PutState(chaincodeName, buf)
+}
+
+func constructChaincodeBytesKey(chaincodeName string) string {
+	return fmt.Sprintf("%s_%s", chaincodeName, "bytes")
 }

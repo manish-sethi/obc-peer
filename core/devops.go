@@ -20,7 +20,6 @@ under the License.
 package core
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -28,16 +27,14 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/chaincode"
 	"github.com/hyperledger/fabric/core/chaincode/platforms"
 	"github.com/hyperledger/fabric/core/container"
 	"github.com/hyperledger/fabric/core/crypto"
 	"github.com/hyperledger/fabric/core/peer"
+	uber "github.com/hyperledger/fabric/core/system_chaincode/uber"
 	"github.com/hyperledger/fabric/core/util"
 	pb "github.com/hyperledger/fabric/protos"
-	sysccapi "github.com/hyperledger/fabric/core/system_chaincode/api"
-	uber "github.com/hyperledger/fabric/core/system_chaincode/uber"
 )
 
 var devopsLogger = logging.MustGetLogger("devops")
@@ -135,7 +132,7 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 	}
 
-	tx, err = d.wrapInUberTransaction(tx)
+	tx, err = uber.Wrap(tx)
 	if err != nil {
 		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 	}
@@ -150,7 +147,7 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	return chaincodeDeploymentSpec, err
 }
 
-func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec, baseChaincode string) (*pb.ChaincodeUpgradeSpec, error) {
+func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec, parentChaincode string) (*pb.ChaincodeUpgradeSpec, error) {
 	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
 
 	if err != nil {
@@ -160,14 +157,14 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec, baseChainc
 
 	// Now create the Transactions message and send to Peer.
 	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-	chaincodeUpgradeSpec := &pb.ChaincodeUpgradeSpec{ChaincodeDeploymentSpec:chaincodeDeploymentSpec, BaseChaincodeName:baseChaincode}
+	chaincodeUpgradeSpec := &pb.ChaincodeUpgradeSpec{ChaincodeDeploymentSpec: chaincodeDeploymentSpec, ParentChaincodeName: parentChaincode}
 	var tx *pb.Transaction
 	devopsLogger.Debug("Creating deployment transaction (%s)", transID)
 	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec, transID)
 	if err != nil {
 		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 	}
-	tx, err = d.wrapInUberTransaction(tx)
+	tx, err = uber.Wrap(tx)
 	if err != nil {
 		return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
 	}
@@ -274,61 +271,4 @@ func CheckSpec(spec *pb.ChaincodeSpec) error {
 	}
 
 	return platform.ValidateSpec(spec)
-}
-
-//--------- UBER funcs -------------
-func (d *Devops) wrapInUberTransaction(tx *pb.Transaction) (*pb.Transaction, error) {
-	var outertx *pb.Transaction
-	var err error
-
-	/***** NEW Approach - send func, args and compute binary on each validator
-	newArgs := make([]string, len(cds.ChaincodeSpec.CtorMsg.Args)+1)
-	newArgs[0] = cds.ChaincodeSpec.CtorMsg.Function
-	for _,arg := range cds.ChaincodeSpec.CtorMsg.Args {
-		newArgs = append(newArgs, arg)
-	}
-	**************/
-
-	//for now old approach .... Base64 encoding... ugh
-	var data []byte
-	data, err = proto.Marshal(tx)
-	if err != nil {
-		return nil, fmt.Errorf("Could not marshal chaincode deployment spec : %s", err)
-	}
-	newArgs := make([]string, 1)
-	newArgs[0] = base64.StdEncoding.EncodeToString([]byte(data))
-
-	spec := &pb.ChaincodeSpec{
-			Type: pb.ChaincodeSpec_GOLANG,
-			ChaincodeID: &pb.ChaincodeID{Name: sysccapi.UBER},
-			CtorMsg: &pb.ChaincodeInput{Function: uber.DEPLOY, Args: newArgs}}
-
-	uuid := tx.Uuid
-
-	if viper.GetBool("security.enabled") {
-		if devopsLogger.IsEnabledFor(logging.DEBUG) {
-			devopsLogger.Debug("Initializing secure devops using context %s", spec.SecureContext)
-		}
-		sec, err := crypto.InitClient(spec.SecureContext, nil)
-		defer crypto.CloseClient(sec)
-
-		// remove the security context since we are no longer need it down stream
-		spec.SecureContext = ""
-
-		if nil != err {
-			return nil, err
-		}
-
-		if devopsLogger.IsEnabledFor(logging.DEBUG) {
-			devopsLogger.Debug("Creating secure transaction %s", uuid)
-		}
-		outertx, err = sec.NewChaincodeExecute(&pb.ChaincodeInvocationSpec{spec}, uuid)
-	} else {
-		if devopsLogger.IsEnabledFor(logging.DEBUG) {
-			devopsLogger.Debug("Creating deployment transaction (%s)", uuid)
-		}
-		outertx, err = pb.NewChaincodeExecute(&pb.ChaincodeInvocationSpec{spec}, uuid, pb.Transaction_CHAINCODE_INVOKE)
-	}
-
-	return outertx, nil
 }

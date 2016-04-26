@@ -249,7 +249,7 @@ func (m *ChaincodeDeploymentSpec) GetEffectiveDate() *google_protobuf.Timestamp 
 
 type ChaincodeUpgradeSpec struct {
 	ChaincodeDeploymentSpec *ChaincodeDeploymentSpec `protobuf:"bytes,1,opt,name=chaincodeDeploymentSpec" json:"chaincodeDeploymentSpec,omitempty"`
-	BaseChaincodeName       string                   `protobuf:"bytes,2,opt,name=baseChaincodeName" json:"baseChaincodeName,omitempty"`
+	ParentChaincodeName     string                   `protobuf:"bytes,2,opt,name=parentChaincodeName" json:"parentChaincodeName,omitempty"`
 }
 
 func (m *ChaincodeUpgradeSpec) Reset()         { *m = ChaincodeUpgradeSpec{} }
