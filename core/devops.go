@@ -147,7 +147,7 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	return chaincodeDeploymentSpec, err
 }
 
-func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeUpgradeSpec, error) {
+func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	if spec.ChaincodeID.Parent == "" {
 		err := fmt.Errorf("Parent missing in upgrade chaincode spec: %v", spec)
 		devopsLogger.Error(fmt.Sprintf("%s", err))
@@ -163,10 +163,9 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 
 	// Now create the Transactions message and send to Peer.
 	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-	chaincodeUpgradeSpec := &pb.ChaincodeUpgradeSpec{ChaincodeDeploymentSpec: chaincodeDeploymentSpec}
 	var tx *pb.Transaction
 	devopsLogger.Debug("Creating upgrade transaction (%s)", transID)
-	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec, transID)
+	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, transID)
 	if err != nil {
 		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
 	}
@@ -174,7 +173,7 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 	if err != nil {
 		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
 	}
-	return chaincodeUpgradeSpec, err
+	return chaincodeDeploymentSpec, err
 }
 
 func (d *Devops) invokeOrQuery(ctx context.Context, chaincodeInvocationSpec *pb.ChaincodeInvocationSpec, invoke bool) (*pb.Response, error) {

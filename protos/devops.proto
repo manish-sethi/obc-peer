@@ -43,7 +43,7 @@ service Devops {
     rpc Query(ChaincodeInvocationSpec) returns (Response) {}
 
     // Upgrade the chaincode package to the chain.
-    rpc Upgrade(ChaincodeSpec) returns (ChaincodeUpgradeSpec) {}
+    rpc Upgrade(ChaincodeSpec) returns (ChaincodeDeploymentSpec) {}
 
 }
 

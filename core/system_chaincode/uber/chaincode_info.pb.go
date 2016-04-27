@@ -23,7 +23,7 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 type ChaincodeInfo struct {
-	ParentChaincodeName string `protobuf:"bytes,2,opt,name=parentChaincodeName" json:"parentChaincodeName,omitempty"`
+	ParentChaincodeName string `protobuf:"bytes,1,opt,name=parentChaincodeName" json:"parentChaincodeName,omitempty"`
 }
 
 func (m *ChaincodeInfo) Reset()         { *m = ChaincodeInfo{} }

@@ -20,59 +20,102 @@ under the License.
 package uber
 
 import (
+	"fmt"
+	"os"
 	"testing"
-  "encoding/base64"
-  "github.com/golang/protobuf/proto"
-  pb "github.com/hyperledger/fabric/protos"
-  "github.com/hyperledger/fabric/core/container"
-  "github.com/hyperledger/fabric/core/chaincode"
-  "golang.org/x/net/context"
-  "github.com/spf13/viper"
+
+	"github.com/op/go-logging"
+	"github.com/spf13/viper"
 )
 
 func TestUberCCDeploy(t *testing.T) {
-  viper.Set("peer.fileSystemPath", "/var/hyperledger/test/uber")
-  deployTx := constructDeployTx(t, "github.com/hyperledger/fabric/examples/chaincode/go/chaincode_example01", "init", []string{"a", "100", "b", "200"})
-  ctxt := context.Background()
-  var ccSupport *chaincode.ChaincodeSupport
-	//sysccapi.RegisterSysCC(name string, path string, o interface{})
-  //ccSupport = chaincode.NewChaincodeSupport(chainname chaincode.ChainName, getPeerEndpoint func()
-  t.Logf("ccSupport = %s", ccSupport)
-  chaincode.Execute(ctxt, ccSupport, deployTx)
+	h := newUberTestHelper(t)
+	h.startChaincodeRuntimeWithGRPC()
+	defer h.stopGRPCServer()
+
+	ccName := h.deployViaUber("github.com/hyperledger/fabric/examples/chaincode/go/chaincode_example02", "init", []string{"a", "100", "b", "200"})
+	t.Logf("Deployed chaincode - example02")
+
+	// validate state set by init
+	h.assertState(ccName, "a", []byte("100"))
+	h.assertState(ccName, "b", []byte("200"))
+	t.Logf("Validated state after init of chaincode - example02")
+
+	// invoke
+	h.executeInvoke(ccName, "", []string{"a", "b", "10"})
+	t.Logf("invoked a tx on chaincode - example02")
+
+	// validate state modified by invoke
+	h.assertState(ccName, "a", []byte("90"))
+	h.assertState(ccName, "b", []byte("210"))
+	t.Logf("Validated state after invoke on chaincode - example02")
 }
 
-func constructDeployTx(t *testing.T, url string, initFuncName string, initArgs []string) *pb.Transaction {
-  cds := constructDeploymentSpec(t, url, initFuncName, initArgs)
-  txID := cds.ChaincodeSpec.ChaincodeID.Name
-  deployTx, err := pb.NewChaincodeDeployTransaction(cds, txID)
-	if err != nil {
-		t.Fatalf("Error: %s", err)
+func TestUberCCUpgrade(t *testing.T) {
+	h := newUberTestHelper(t)
+	h.startChaincodeRuntimeWithGRPC()
+	defer h.stopGRPCServer()
+	ccName := h.deployViaUber("github.com/hyperledger/fabric/examples/chaincode/go/chaincode_example02", "init", []string{"a", "100", "b", "200"})
+	t.Logf("Deployed chaincode - example02")
+
+	// validate state set by init
+	h.assertState(ccName, "a", []byte("100"))
+	h.assertState(ccName, "b", []byte("200"))
+	t.Logf("Validated state after init of chaincode - example02")
+
+	// invoke
+	h.executeInvoke(ccName, "", []string{"a", "b", "10"})
+	t.Logf("invoked a tx on chaincode - example02")
+
+	// validate state modified by invoke
+	h.assertState(ccName, "a", []byte("90"))
+	h.assertState(ccName, "b", []byte("210"))
+	t.Logf("Validated state after invoke on chaincode - example02")
+
+	// upgrade chaincode
+	upgradedCCName := h.upgradeViaUber(ccName, "github.com/hyperledger/fabric/core/system_chaincode/uber/test/chaincode_example02_upgraded", "init", []string{"a", "b", "2"})
+	t.Logf("Upgraded chaincode - example02_upgraded from chaincode - example02")
+
+	// validate state copied from parent and modified by init
+	h.assertState(upgradedCCName, "a", []byte("92"))
+	h.assertState(upgradedCCName, "b", []byte("212"))
+	t.Logf("Validated state after init of chaincode - example02_upgraded")
+
+	// invoke on new chaicode
+	h.executeInvoke(upgradedCCName, "", []string{"b", "a", "10"})
+	t.Logf("invoked a tx on chaincode - example02_upgraded")
+
+	// validate state modified by invoke on new chaicode
+	h.assertState(upgradedCCName, "a", []byte("102"))
+	h.assertState(upgradedCCName, "b", []byte("202"))
+	t.Logf("Validated state after invoke on chaincode - example02_upgraded")
+}
+
+func TestMain(m *testing.M) {
+	setupTestConfig()
+	viper.Set("ledger.blockchain.deploy-system-chaincode", "false")
+	viper.Set("validator.validity-period.verification", "false")
+	os.Exit(m.Run())
+}
+
+// SetupTestConfig setup the config during test execution
+func setupTestConfig() {
+	viper.SetConfigName("uber_test")          // name of config file (without extension)
+	viper.AddConfigPath(".")            // path to look for the config file in
+	err := viper.ReadInConfig()          // Find and read the config file
+	if err != nil {                      // Handle errors reading the config file
+		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
-	return wrapInUberTx(t, deployTx)
+	setupTestLogging()
 }
 
-func constructDeploymentSpec(t *testing.T, url string, initFuncName string, initArgs []string) *pb.ChaincodeDeploymentSpec {
-  spec := &pb.ChaincodeSpec{Type: 1, ChaincodeID: &pb.ChaincodeID{Path: url}, CtorMsg: &pb.ChaincodeInput{Function: initFuncName, Args: initArgs}}
-	codePackageBytes, err := container.GetChaincodePackageBytes(spec)
-	if err != nil {
-		t.Fatalf("Error: %s", err)
-	}
-	chaincodeDeploymentSpec := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: spec, CodePackage: codePackageBytes, ExecEnv:1}
-	return chaincodeDeploymentSpec
-}
-
-func encodeBase64(t *testing.T, tx *pb.Transaction) string {
-  data, err := proto.Marshal(tx)
-  if err != nil {
-    t.Fatalf("Error: %s", err)
-  }
-  return base64.StdEncoding.EncodeToString(data)
-}
-
-func wrapInUberTx(t *testing.T, tx *pb.Transaction) *pb.Transaction {
-	uberTx, err := Wrap(tx)
-	if err != nil {
-    t.Fatalf("Error: %s", err)
-  }
-	return uberTx
+func setupTestLogging() {
+  var formatter = logging.MustStringFormatter(
+    `%{color} [%{module}] %{shortfunc} [%{shortfile}] -> %{level:.4s} %{id:03x}%{color:reset} %{message}`,
+  )
+  logging.SetFormatter(formatter)
+	logging.SetLevel(logging.ERROR, "main")
+	logging.SetLevel(logging.ERROR, "server")
+	logging.SetLevel(logging.ERROR, "peer")
+  logging.SetLevel(logging.ERROR, "ledger")
 }

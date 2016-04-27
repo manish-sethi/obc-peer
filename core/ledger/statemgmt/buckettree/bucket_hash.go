@@ -53,7 +53,7 @@ func (c *bucketHashCalculator) computeCryptoHash() []byte {
 		c.currentChaincodeID = ""
 		c.dataNodes = nil
 	}
-	logger.Debug("Hashable content for bucket [%s]: length=%d, contentInStringForm=[%s]", c.bucketKey, len(c.hashingData), string(c.hashingData))
+	logger.Debug("Hashable content for bucket [%s]: length=%d", c.bucketKey, len(c.hashingData))
 	if util.IsNil(c.hashingData) {
 		return nil
 	}

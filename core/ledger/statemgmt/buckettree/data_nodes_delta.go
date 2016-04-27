@@ -68,7 +68,7 @@ func (dataNodesDelta *dataNodesDelta) add(chaincodeID string, key string, value 
 	dataKey := newDataKey(chaincodeID, key)
 	bucketKey := dataKey.getBucketKey()
 	dataNode := newDataNode(dataKey, value)
-	logger.Debug("Adding dataNode=[%s] against bucketKey=[%s]", dataNode, bucketKey)
+	logger.Debug("Adding dataNode=[%s] against bucketKey=[%s]", dataNode.dataKey, bucketKey)
 	dataNodesDelta.byBucket[*bucketKey] = append(dataNodesDelta.byBucket[*bucketKey], dataNode)
 }
 

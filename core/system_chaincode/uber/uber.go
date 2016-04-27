@@ -134,14 +134,14 @@ func (t *UberSysCC) deployChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction
 }
 
 func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction, txBytes []byte) ([]byte, error) {
-	cus := &pb.ChaincodeUpgradeSpec{}
-	err := proto.Unmarshal(tx.Payload, cus)
+	cds := &pb.ChaincodeDeploymentSpec{}
+	err := proto.Unmarshal(tx.Payload, cds)
 	if err != nil {
 		return nil, err
 	}
 
-	ccName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-	parentCCName := cus.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Parent
+	ccName := cds.ChaincodeSpec.ChaincodeID.Name
+	parentCCName := cds.ChaincodeSpec.ChaincodeID.Parent
 	parentCCInfoBytes, err := getChaincodeInfo(stub, parentCCName)
 	if parentCCInfoBytes == nil {
 		return nil, fmt.Errorf("Parent chaincode [%s] does not exist", parentCCName)
@@ -155,17 +155,10 @@ func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transactio
 		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
 	}
 	ledger.CopyState(parentCCName, ccName)
+	logger.Debug("Ledger state copied from chaincode [%s] to chaincode [%s]", ccName, parentCCName)
 
 	// morph the tx into a deploy tx
 	tx.Type = pb.Transaction_CHAINCODE_DEPLOY
-	tx.Payload, err = proto.Marshal(cus.ChaincodeDeploymentSpec)
-	if err != nil {
-		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
-	}
-	txBytes, err = proto.Marshal(tx)
-	if err != nil {
-		return nil, fmt.Errorf("Error upgrading %s: %s", ccName, err)
-	}
 
 	t.deployChaincode(stub, tx, txBytes)
 	ccInfo, err := getChaincodeInfo(stub, ccName)

@@ -22,5 +22,5 @@ syntax = "proto3";
 package uber;
 
 message ChaincodeInfo {
-    string parentChaincodeName = 2;
+    string parentChaincodeName = 1;
 }

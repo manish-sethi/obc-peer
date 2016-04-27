@@ -410,7 +410,7 @@ func serve(args []string) error {
 		return err
 	}
 
-	//register all system chaincodes. This just registers chaincodes, they must be 
+	//register all system chaincodes. This just registers chaincodes, they must be
 	//still be deployed and launched
 	system_chaincode.RegisterSysCCs()
 	peerEndpoint, err := peer.GetPeerEndpoint()
@@ -917,13 +917,13 @@ func chaincodeUpgrade(cmd *cobra.Command, args []string) (err error) {
 		}
 	}
 
-	chaincodeUpgradeSpec, err := devopsClient.Upgrade(context.Background(), spec)
+	chaincodeDeploymentSpec, err := devopsClient.Upgrade(context.Background(), spec)
 	if err != nil {
 		err = fmt.Errorf("Error building %s: %s\n", chainFuncName, err)
 		return
 	}
-	logger.Info("Upgrade result: %s", chaincodeUpgradeSpec.ChaincodeDeploymentSpec.ChaincodeSpec)
-	fmt.Println(chaincodeUpgradeSpec.ChaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name)
+	logger.Info("Upgrade result: %s", chaincodeDeploymentSpec.ChaincodeSpec)
+	fmt.Println(chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name)
 	return nil
 }
 

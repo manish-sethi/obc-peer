@@ -95,10 +95,6 @@ message ChaincodeDeploymentSpec {
 
 }
 
-message ChaincodeUpgradeSpec {
-  ChaincodeDeploymentSpec chaincodeDeploymentSpec = 1;
-}
-
 // Carries the chaincode function and its arguments.
 message ChaincodeInvocationSpec {
 

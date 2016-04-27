@@ -92,7 +92,7 @@ type DevopsClient interface {
 	// Invoke chaincode.
 	Query(ctx context.Context, in *ChaincodeInvocationSpec, opts ...grpc.CallOption) (*Response, error)
 	// Upgrade the chaincode package to the chain.
-	Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeUpgradeSpec, error)
+	Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeDeploymentSpec, error)
 }
 
 type devopsClient struct {
@@ -148,8 +148,8 @@ func (c *devopsClient) Query(ctx context.Context, in *ChaincodeInvocationSpec, o
 	return out, nil
 }
 
-func (c *devopsClient) Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeUpgradeSpec, error) {
-	out := new(ChaincodeUpgradeSpec)
+func (c *devopsClient) Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeDeploymentSpec, error) {
+	out := new(ChaincodeDeploymentSpec)
 	err := grpc.Invoke(ctx, "/protos.Devops/Upgrade", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ type DevopsServer interface {
 	// Invoke chaincode.
 	Query(context.Context, *ChaincodeInvocationSpec) (*Response, error)
 	// Upgrade the chaincode package to the chain.
-	Upgrade(context.Context, *ChaincodeSpec) (*ChaincodeUpgradeSpec, error)
+	Upgrade(context.Context, *ChaincodeSpec) (*ChaincodeDeploymentSpec, error)
 }
 
 func RegisterDevopsServer(s *grpc.Server, srv DevopsServer) {

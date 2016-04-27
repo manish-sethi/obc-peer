@@ -20,7 +20,6 @@ It has these top-level messages:
 	ChaincodeInput
 	ChaincodeSpec
 	ChaincodeDeploymentSpec
-	ChaincodeUpgradeSpec
 	ChaincodeInvocationSpec
 	ChaincodeSecurityContext
 	ChaincodeMessage

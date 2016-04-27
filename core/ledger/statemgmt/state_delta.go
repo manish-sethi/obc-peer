@@ -26,6 +26,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/util"
+	"github.com/op/go-logging"
 )
 
 // StateDelta holds the changes to existing state. This struct is used for holding the uncommited changes during execution of a tx-batch
@@ -167,7 +168,14 @@ func (stateDelta *StateDelta) ComputeCryptoHash() []byte {
 		}
 	}
 	hashingContent := buffer.Bytes()
-	logger.Debug("computing hash on %#v", hashingContent)
+	if logger.IsEnabledFor(logging.DEBUG){
+		hashingContentSize := len(hashingContent)
+		if hashingContentSize < 1000 {
+			logger.Debug("computing hash on %#v", hashingContent)
+		}else{
+			logger.Debug("computing hash on a long content of size [%d] bytes", hashingContentSize)
+		}
+	}
 	return util.ComputeCryptoHash(hashingContent)
 }
 

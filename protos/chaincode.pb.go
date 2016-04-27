@@ -249,21 +249,6 @@ func (m *ChaincodeDeploymentSpec) GetEffectiveDate() *google_protobuf.Timestamp 
 	return nil
 }
 
-type ChaincodeUpgradeSpec struct {
-	ChaincodeDeploymentSpec *ChaincodeDeploymentSpec `protobuf:"bytes,1,opt,name=chaincodeDeploymentSpec" json:"chaincodeDeploymentSpec,omitempty"`
-}
-
-func (m *ChaincodeUpgradeSpec) Reset()         { *m = ChaincodeUpgradeSpec{} }
-func (m *ChaincodeUpgradeSpec) String() string { return proto.CompactTextString(m) }
-func (*ChaincodeUpgradeSpec) ProtoMessage()    {}
-
-func (m *ChaincodeUpgradeSpec) GetChaincodeDeploymentSpec() *ChaincodeDeploymentSpec {
-	if m != nil {
-		return m.ChaincodeDeploymentSpec
-	}
-	return nil
-}
-
 // Carries the chaincode function and its arguments.
 type ChaincodeInvocationSpec struct {
 	ChaincodeSpec *ChaincodeSpec `protobuf:"bytes,1,opt,name=chaincodeSpec" json:"chaincodeSpec,omitempty"`

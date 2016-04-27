@@ -93,12 +93,12 @@ func NewChaincodeDeployTransaction(chaincodeDeploymentSpec *ChaincodeDeploymentS
 }
 
 // NewChaincodeUpgradeTransaction constructs a transaction for upgrading a chaincode
-func NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec *ChaincodeUpgradeSpec, uuid string) (*Transaction, error) {
+func NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec *ChaincodeDeploymentSpec, uuid string) (*Transaction, error) {
 	transaction := new(Transaction)
 	transaction.Type = Transaction_CHAINCODE_UPGRADE
 	transaction.Uuid = uuid
 	transaction.Timestamp = util.CreateUtcTimestamp()
-	cID := chaincodeUpgradeSpec.ChaincodeDeploymentSpec.ChaincodeSpec.GetChaincodeID()
+	cID := chaincodeDeploymentSpec.ChaincodeSpec.GetChaincodeID()
 	if cID != nil {
 		data, err := proto.Marshal(cID)
 		if err != nil {
@@ -106,7 +106,7 @@ func NewChaincodeUpgradeTransaction(chaincodeUpgradeSpec *ChaincodeUpgradeSpec, 
 		}
 		transaction.ChaincodeID = data
 	}
-	data, err := proto.Marshal(chaincodeUpgradeSpec)
+	data, err := proto.Marshal(chaincodeDeploymentSpec)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Error mashalling payload for chaincode deployment: %s", err))
 		return nil, fmt.Errorf("Could not marshal payload for chaincode deployment: %s", err)
