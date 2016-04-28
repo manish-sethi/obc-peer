@@ -109,6 +109,7 @@ func (t *UberSysCC) deployChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction
 
 	ccInfoBytes, err := stub.GetState(cds.ChaincodeSpec.ChaincodeID.Name)
 	if ccInfoBytes != nil {
+		logger.Debug("ChaincodeID [%s] already exists", cds.ChaincodeSpec.ChaincodeID.Name)
 		return nil, TXExistsErr(cds.ChaincodeSpec.ChaincodeID.Name)
 	}
 
@@ -123,7 +124,7 @@ func (t *UberSysCC) deployChaincode(stub *shim.ChaincodeStub, tx *pb.Transaction
 		return nil, fmt.Errorf("PutState failed for %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
 	}
 
-	ccInfo := &ChaincodeInfo{}
+	ccInfo := &ChaincodeInfo{ParentChaincodeName:"__"}
 	err = putChaincodeInfo(stub, cds.ChaincodeSpec.ChaincodeID.Name, ccInfo)
 	if err != nil {
 		return nil, fmt.Errorf("PutState failed for info of %s: %s", cds.ChaincodeSpec.ChaincodeID.Name, err)
@@ -144,6 +145,7 @@ func (t *UberSysCC) upgradeChaincode(stub *shim.ChaincodeStub, tx *pb.Transactio
 	parentCCName := cds.ChaincodeSpec.ChaincodeID.Parent
 	parentCCInfoBytes, err := getChaincodeInfo(stub, parentCCName)
 	if parentCCInfoBytes == nil {
+		logger.Debug("Parent chaincode [%s] does not exists", parentCCName)
 		return nil, fmt.Errorf("Parent chaincode [%s] does not exist", parentCCName)
 	}
 	if err != nil {
@@ -195,6 +197,9 @@ func getChaincodeInfo(stub *shim.ChaincodeStub, chaincodeName string) (*Chaincod
 	buf, err := stub.GetState(chaincodeName)
 	if err != nil{
 		return nil, err
+	}
+	if buf == nil {
+		return nil, nil
 	}
 	chaincodeInfo := &ChaincodeInfo{}
 	err = proto.Unmarshal(buf, chaincodeInfo)

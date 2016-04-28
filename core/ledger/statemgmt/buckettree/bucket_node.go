@@ -43,7 +43,7 @@ func unmarshalBucketNode(bucketKey *bucketKey, serializedBytes []byte) *bucketNo
 	bucketNode := newBucketNode(bucketKey)
 	buffer := proto.NewBuffer(serializedBytes)
 	for i := 0; i < conf.getMaxGroupingAtEachLevel(); i++ {
-		childCryptoHash, err := buffer.DecodeRawBytes(false)
+		childCryptoHash, err := buffer.DecodeRawBytes(true)
 		if err != nil {
 			panic(fmt.Errorf("this error should not occur: %s", err))
 		}
