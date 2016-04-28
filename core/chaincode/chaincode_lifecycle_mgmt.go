@@ -19,6 +19,79 @@ under the License.
 
 package chaincode
 
-type ChaincodeLifeCycleManager interface {
+import (
+	"fmt"
+
+	//"github.com/golang/protobuf/proto"
+	"golang.org/x/net/context"
+
+	"github.com/hyperledger/fabric/core/ledger"
+	pb "github.com/hyperledger/fabric/protos"
+)
+
+const(
+	chaincodeInfoNameSpace = "UBER"
+)
+
+type ChaincodeLifecycleManager interface {
+  Init(lgr *ledger.Ledger, chain *ChaincodeSupport) error
   ExecuteTransaction(ctxt context.Context, t *pb.Transaction) error
 }
+
+type DefaultChaincodeLifecycleManager struct{
+  lgr *ledger.Ledger
+  chain *ChaincodeSupport
+}
+
+func (lcm *DefaultChaincodeLifecycleManager) Init(lgr *ledger.Ledger, chain *ChaincodeSupport) error {
+  lcm.lgr = lgr
+  lcm.chain = chain
+  return nil
+}
+
+func (lcm *DefaultChaincodeLifecycleManager) ExecuteTransaction(ctxt context.Context, t *pb.Transaction) error {
+  if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
+    _, err := lcm.chain.DeployChaincode(ctxt, t)
+    if err != nil {
+      return fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
+    }
+
+//     //launch and wait for ready
+//     markTxBegin(lgr, t)
+//     _, _, err = chain.LaunchChaincode(ctxt, t)
+//     if err != nil {
+//       markTxFinish(lgr, t, false)
+//       return nil, fmt.Errorf("%s", err)
+//     }
+//     markTxFinish(lgr, t, true)
+    }
+    return nil
+ }
+//
+// func getChaincodeInfo(lgr *ledger.Ledger, chaincodeName string) (*ChaincodeInfo, error) {
+// 	buf, err := lgr.GetState(chaincodeInfoNameSpace, chaincodeName)
+// 	if err != nil{
+// 		return nil, err
+// 	}
+// 	if buf == nil {
+// 		return nil, nil
+// 	}
+// 	chaincodeInfo := &ChaincodeInfo{}
+// 	err = proto.Unmarshal(buf, chaincodeInfo)
+// 	if err != nil{
+// 		return nil, err
+// 	}
+// 	return chaincodeInfo, nil
+// }
+//
+// func putChaincodeInfo(lgr *ledger.Ledger, chaincodeName string, info *ChaincodeInfo) error {
+// 	buf, err := proto.Marshal(info)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return stub.PutState(chaincodeInfoNameSpacechaincodeName, buf)
+// }
+//
+// func constructChaincodeBytesKey(chaincodeName string) string {
+// 	return fmt.Sprintf("%s_%s", chaincodeName, "bytes")
+// }
