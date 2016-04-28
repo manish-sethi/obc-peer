@@ -253,3 +253,25 @@ func TestVMCStopContainer(t *testing.T) {
 	fmt.Println("VMCStopContainer-waiting for response")
 	<-c
 }
+
+func TestVMCRemoveImage(t *testing.T) {
+	var ctxt = context.Background()
+
+	c := make(chan struct{})
+
+	//creat a RemoveImageReq obj and send it to VMCProcess
+	go func() {
+		defer close(c)
+		rir := RemoveImageReq{CCID: ccintf.CCID{ ChaincodeSpec: &pb.ChaincodeSpec{ ChaincodeID: &pb.ChaincodeID{Name: "simple"}}}, Force: true}
+		_, err := VMCProcess(ctxt, "Docker", rir)
+		if err != nil {
+			t.Fail()
+			t.Logf("Error removing images: %s", err)
+			return
+		}
+	}()
+
+	//wait for VMController to complete.
+	fmt.Println("VMCRemoveImage-waiting for response")
+	<-c
+}

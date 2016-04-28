@@ -212,6 +212,17 @@ func (vm *InprocVM) Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, d
 	return nil
 }
 
+func (vm *InprocVM) Remove(ctxt context.Context, ccid ccintf.CCID, force bool) error {
+	path := ccid.ChaincodeSpec.ChaincodeID.Path
+
+	ipctemplate := typeRegistry[path]
+	if ipctemplate == nil {
+		return fmt.Errorf("%s not registered", path)
+	}
+
+	return fmt.Errorf("cannot remove system chaincode %s ", ccid.ChaincodeSpec.ChaincodeID.Name)
+}
+
 //GetVMName ignores the peer and network name as it just needs to be unique in process
 func (vm *InprocVM) GetVMName(ccid ccintf.CCID) (string, error) {
 	return ccid.ChaincodeSpec.ChaincodeID.Name, nil

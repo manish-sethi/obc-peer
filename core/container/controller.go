@@ -36,6 +36,7 @@ type vm interface {
 	Deploy(ctxt context.Context, ccid ccintf.CCID, args []string, env []string, attachstdin bool, attachstdout bool, reader io.Reader) error
 	Start(ctxt context.Context, ccid ccintf.CCID, args []string, env []string, attachstdin bool, attachstdout bool) error
 	Stop(ctxt context.Context, ccid ccintf.CCID, timeout uint, dontkill bool, dontremove bool) error
+	Remove(ctxt context.Context, ccid ccintf.CCID, force bool) error
 	GetVMName(ccID ccintf.CCID) (string, error)
 }
 
@@ -211,6 +212,29 @@ func (si StopImageReq) do(ctxt context.Context, v vm) VMCResp {
 
 func (si StopImageReq) getCCID() ccintf.CCID {
 	return si.CCID
+}
+
+//RemoveImageReq - properties for stopping a container.
+type RemoveImageReq struct {
+	ccintf.CCID
+	//Stop all runnning instances
+	Force bool
+}
+
+func (ri RemoveImageReq) do(ctxt context.Context, v vm) VMCResp {
+	var resp VMCResp
+
+	if err := v.Remove(ctxt, ri.CCID, ri.Force); err != nil {
+		resp = VMCResp{Err: err}
+	} else {
+		resp = VMCResp{}
+	}
+
+	return resp
+}
+
+func (ri RemoveImageReq) getCCID() ccintf.CCID {
+	return ri.CCID
 }
 
 //VMCProcess should be used as follows

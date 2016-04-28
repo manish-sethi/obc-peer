@@ -150,6 +150,31 @@ func (vm *DockerVM) stopInternal(ctxt context.Context, client *docker.Client, id
 	return err
 }
 
+//Remove removes the images, if force, stop and remove containers first
+func (vm *DockerVM) Remove(ctxt context.Context, ccid ccintf.CCID, force bool) error {
+	client, err := cutil.NewDockerClient()
+	if err != nil {
+		dockerLogger.Debug("start - cannot create client %s", err)
+		return err
+	}
+
+	id, _ := vm.GetVMName(ccid)
+
+	if force {
+		id2 := strings.Replace(id, ":", "_", -1)
+		vm.stopInternal(ctxt, client, id2, 0, false, false)
+	}
+
+	err = client.RemoveImage(id)
+	if err != nil {
+		dockerLogger.Debug("Remove image %s(%s)", id, err)
+	} else {
+		dockerLogger.Debug("Removed image %s", id)
+	}
+
+	return err
+}
+
 //GetVMName generates the docker image from peer information given the hashcode. This is needed to
 //keep image name's unique in a single host, multi-peer environment (such as a development environment)
 func (vm *DockerVM) GetVMName(ccid ccintf.CCID) (string, error) {
