@@ -59,5 +59,5 @@ func (dataNode *dataNode) getValue() []byte {
 }
 
 func (dataNode *dataNode) String() string {
-	return fmt.Sprintf("dataKey=[%s], value=[%s]", dataNode.dataKey, string(dataNode.value))
+	return fmt.Sprintf("dataKey=[%s], value-length=[%d] bytes", dataNode.dataKey, len(dataNode.value))
 }

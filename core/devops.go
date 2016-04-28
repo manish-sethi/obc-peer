@@ -173,6 +173,11 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 	if err != nil {
 		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
 	}
+
+	resp := d.coord.ExecuteTransaction(tx)
+	if resp.Status == pb.Response_FAILURE {
+		err = fmt.Errorf(string(resp.Msg))
+	}
 	return chaincodeDeploymentSpec, err
 }
 
