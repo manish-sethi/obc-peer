@@ -20,6 +20,7 @@ under the License.
 package uber
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"testing"
@@ -28,7 +29,18 @@ import (
 	"github.com/spf13/viper"
 )
 
+//set to true by providing "-run-uber-tests" command line option... 
+var runTests bool
+func testForSkip(t *testing.T) {
+	//run tests
+	if !runTests {
+		t.SkipNow()
+	}
+}
+
 func TestUberCCDeploy(t *testing.T) {
+	testForSkip(t)
+
 	h := newUberTestHelper(t)
 	h.startChaincodeRuntimeWithGRPC()
 	defer h.stopGRPCServer()
@@ -52,6 +64,8 @@ func TestUberCCDeploy(t *testing.T) {
 }
 
 func TestUberCCUpgrade(t *testing.T) {
+	testForSkip(t)
+
 	h := newUberTestHelper(t)
 	h.startChaincodeRuntimeWithGRPC()
 	defer h.stopGRPCServer()
@@ -92,6 +106,8 @@ func TestUberCCUpgrade(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	flag.BoolVar(&runTests, "run-uber-tests", false, "run tests")
+	flag.Parse()
 	setupTestConfig()
 	viper.Set("ledger.blockchain.deploy-system-chaincode", "false")
 	viper.Set("validator.validity-period.verification", "false")
