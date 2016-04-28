@@ -110,7 +110,7 @@ func (*Devops) getChaincodeBytes(context context.Context, spec *pb.ChaincodeSpec
 }
 
 // Deploy deploys the supplied chaincode image to the validators through a transaction
-func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
+func (d *Devops) DeployViaUber(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	// get the deployment spec
 	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
 
@@ -147,7 +147,59 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	return chaincodeDeploymentSpec, err
 }
 
-func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
+// Deploy deploys the supplied chaincode image to the validators through a transaction
+func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
+	// get the deployment spec
+	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
+
+	if err != nil {
+		devopsLogger.Error(fmt.Sprintf("Error deploying chaincode spec: %v\n\n error: %s", spec, err))
+		return nil, err
+	}
+
+	// Now create the Transactions message and send to Peer.
+
+	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+
+	var tx *pb.Transaction
+	var sec crypto.Client
+
+	if viper.GetBool("security.enabled") {
+		devopsLogger.Debug("Initializing secure devops using context %s", spec.SecureContext)
+		sec, err = crypto.InitClient(spec.SecureContext, nil)
+		defer crypto.CloseClient(sec)
+
+		// remove the security context since we are no longer need it down stream
+		spec.SecureContext = ""
+
+		if nil != err {
+			return nil, err
+		}
+		devopsLogger.Debug("Creating secure transaction %s", transID)
+		tx, err = sec.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, transID)
+		if nil != err {
+			return nil, err
+		}
+	} else {
+		devopsLogger.Debug("Creating deployment transaction (%s)", transID)
+		tx, err = pb.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, transID)
+		if err != nil {
+			return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
+		}
+	}
+
+	if devopsLogger.IsEnabledFor(logging.DEBUG) {
+		devopsLogger.Debug("Sending deploy transaction (%s) to validator", tx.Uuid)
+	}
+	resp := d.coord.ExecuteTransaction(tx)
+	if resp.Status == pb.Response_FAILURE {
+		err = fmt.Errorf(string(resp.Msg))
+	}
+
+	return chaincodeDeploymentSpec, err
+}
+
+func (d *Devops) UpgradeViaUber(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	if spec.ChaincodeID.Parent == "" {
 		err := fmt.Errorf("Parent missing in upgrade chaincode spec: %v", spec)
 		devopsLogger.Error(fmt.Sprintf("%s", err))
@@ -174,6 +226,33 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
 	}
 
+	resp := d.coord.ExecuteTransaction(tx)
+	if resp.Status == pb.Response_FAILURE {
+		err = fmt.Errorf(string(resp.Msg))
+	}
+	return chaincodeDeploymentSpec, err
+}
+
+func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
+	if spec.ChaincodeID.Parent == "" {
+		err := fmt.Errorf("Parent missing in upgrade chaincode spec: %v", spec)
+		devopsLogger.Error(fmt.Sprintf("%s", err))
+		return nil, err
+	}
+	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
+	if err != nil {
+		devopsLogger.Error(fmt.Sprintf("Error upgrading chaincode spec: %v\n\n error: %s", spec, err))
+		return nil, err
+	}
+
+	// Now create the Transactions message and send to Peer.
+	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+	var tx *pb.Transaction
+	devopsLogger.Debug("Creating upgrade transaction (%s)", transID)
+	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, transID)
+	if err != nil {
+		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
+	}
 	resp := d.coord.ExecuteTransaction(tx)
 	if resp.Status == pb.Response_FAILURE {
 		err = fmt.Errorf(string(resp.Msg))

@@ -31,6 +31,10 @@ import (
 	pb "github.com/hyperledger/fabric/protos"
 )
 
+const(
+	chaincodeInfoNameSpace = "__chaincodeInfo"
+)
+
 func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
 	var err error
 	var lgr *ledger.Ledger
@@ -53,11 +57,12 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 	//deploy is needed only for system chaincodes. User chaincodes are deployed by
 	//uber chaincode
 	if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
+		lgr.GetState(chaincodeInfoNameSpace, key string, true)
 	 	_, err := chain.Deploy(ctxt, t)
 	 	if err != nil {
 	 		return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
 	 	}
-	
+
 	 	//launch and wait for ready
 	 	markTxBegin(lgr, t)
 	 	_, _, err = chain.Launch(ctxt, t)
@@ -201,4 +206,32 @@ func markTxFinish(ledger *ledger.Ledger, t *pb.Transaction, successful bool) {
 		return
 	}
 	ledger.TxFinished(t.Uuid, successful)
+}
+
+func getChaincodeInfo(lgr *ledger.Ledger, chaincodeName string) (*ChaincodeInfo, error) {
+	buf, err := lgr.GetState(chaincodeInfoNameSpace, chaincodeName)
+	if err != nil{
+		return nil, err
+	}
+	if buf == nil {
+		return nil, nil
+	}
+	chaincodeInfo := &ChaincodeInfo{}
+	err = proto.Unmarshal(buf, chaincodeInfo)
+	if err != nil{
+		return nil, err
+	}
+	return chaincodeInfo, nil
+}
+
+func putChaincodeInfo(lgr *ledger.Ledger, chaincodeName string, info *ChaincodeInfo) error {
+	buf, err := proto.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return stub.PutState(chaincodeInfoNameSpacechaincodeName, buf)
+}
+
+func constructChaincodeBytesKey(chaincodeName string) string {
+	return fmt.Sprintf("%s_%s", chaincodeName, "bytes")
 }
