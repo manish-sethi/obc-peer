@@ -141,11 +141,11 @@ func (state *State) GetRangeScanIterator(chaincodeID string, startKey string, en
 
 // Set sets state to given value for chaincodeID and key. Does not immideatly writes to DB
 func (state *State) Set(chaincodeID string, key string, value []byte) error {
-	if logger.IsEnabledFor(logging.DEBUG){
+	if logger.IsEnabledFor(logging.DEBUG) {
 		valueSize := len(value)
-		if valueSize < 1000{
+		if valueSize < 1000 {
 			logger.Debug("set() chaincodeID=[%s], key=[%s], value=[%#v]", chaincodeID, key, value)
-		}else{
+		} else {
 			logger.Debug("set() chaincodeID=[%s], key=[%s], very long value of size [%d] bytes", chaincodeID, key, valueSize)
 		}
 	}
@@ -197,6 +197,7 @@ func (state *State) Delete(chaincodeID string, key string) error {
 
 // CopyState copies all the key-values from sourceChaincodeID to destChaincodeID
 func (state *State) CopyState(sourceChaincodeID string, destChaincodeID string) error {
+	logger.Debug("Coping state from chaincode [%s] to [%s]", sourceChaincodeID, destChaincodeID)
 	itr, err := state.GetRangeScanIterator(sourceChaincodeID, "", "", true)
 	defer itr.Close()
 	if err != nil {
@@ -205,19 +206,20 @@ func (state *State) CopyState(sourceChaincodeID string, destChaincodeID string) 
 	for itr.Next() {
 		k, v := itr.GetKeyValue()
 		err := state.Set(destChaincodeID, k, v)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 	}
+	logger.Debug("Copied state from chaincode [%s] to [%s]", sourceChaincodeID, destChaincodeID)
 	return nil
 }
 
 // GetMultipleKeys returns the values for the multiple keys.
 func (state *State) GetMultipleKeys(chaincodeID string, keys []string, committed bool) ([][]byte, error) {
 	var values [][]byte
-	for _,k := range keys{
+	for _, k := range keys {
 		v, err := state.Get(chaincodeID, k, committed)
-		if err != nil{
+		if err != nil {
 			return nil, err
 		}
 		values = append(values, v)
@@ -227,9 +229,9 @@ func (state *State) GetMultipleKeys(chaincodeID string, keys []string, committed
 
 // SetMultipleKeys sets the values for the multiple keys.
 func (state *State) SetMultipleKeys(chaincodeID string, kvs map[string][]byte) error {
-	for k,v := range kvs{
+	for k, v := range kvs {
 		err := state.Set(chaincodeID, k, v)
-		if err != nil{
+		if err != nil {
 			return err
 		}
 	}

@@ -31,6 +31,10 @@ import (
 	pb "github.com/hyperledger/fabric/protos"
 )
 
+const (
+	chaincodeInfoNameSpace = "UBER"
+)
+
 func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) ([]byte, error) {
 	var err error
 	var lgr *ledger.Ledger
@@ -50,23 +54,81 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 		}
 	}
 
-	//deploy is needed only for system chaincodes. User chaincodes are deployed by
-	//uber chaincode
+	// Deploy
 	if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
-	 	_, err := chain.Deploy(ctxt, t)
-	 	if err != nil {
-	 		return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
-	 	}
+		cds, err := extractChaincodeDeploymentSpec(t)
+		if err != nil {
+			return nil, err
+		}
+		ccName := cds.ChaincodeSpec.ChaincodeID.Name
+		ccExists, err := chaincodeExists(lgr, ccName)
+		if err != nil {
+			return nil, err
+		}
+		if ccExists {
+			return nil, fmt.Errorf("Chaincode [%s] already exists", ccName)
+		}
+		_, err = chain.Deploy(ctxt, t)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
+		}
 
-	 	//launch and wait for ready
-	 	markTxBegin(lgr, t)
-	 	_, _, err = chain.Launch(ctxt, t)
-	 	if err != nil {
-	 		markTxFinish(lgr, t, false)
-	 		return nil, fmt.Errorf("%s", err)
-	 	}
-	 	markTxFinish(lgr, t, true)
-	 } else if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
+		//launch and wait for ready
+		markTxBegin(lgr, t)
+		_, _, err = chain.Launch(ctxt, t)
+		if err != nil {
+			markTxFinish(lgr, t, false)
+			return nil, fmt.Errorf("%s", err)
+		}
+		ccInfo := &ChaincodeInfo{ParentChaincodeName: "__"}
+		err = putChaincodeInfo(lgr, ccName, ccInfo)
+		if err != nil {
+			markTxFinish(lgr, t, false)
+			return nil, err
+		}
+		markTxFinish(lgr, t, true)
+	} else if t.Type == pb.Transaction_CHAINCODE_UPGRADE {
+		cds, err := extractChaincodeDeploymentSpec(t)
+		if err != nil {
+			return nil, err
+		}
+		ccName := cds.ChaincodeSpec.ChaincodeID.Name
+		parentCCName := cds.ChaincodeSpec.ChaincodeID.Parent
+		parentCCExists, err := chaincodeExists(lgr, parentCCName)
+		if err != nil {
+			return nil, err
+		}
+		if !parentCCExists {
+			return nil, fmt.Errorf("Parent Chaincode [%s] does not exist. Cannot upgrade chaincode [%s]", parentCCName, ccName)
+		}
+		_, err = chain.Deploy(ctxt, t)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
+		}
+
+		markTxBegin(lgr, t)
+		err = lgr.CopyState(parentCCName, ccName)
+		if err != nil {
+			markTxFinish(lgr, t, false)
+			return nil, err
+		}
+		//launch and wait for ready
+		_, _, err = chain.Launch(ctxt, t)
+		if err != nil {
+			chaincodeLogger.Debug("Error...chain.LaunchChaincode:%s", err)
+			markTxFinish(lgr, t, false)
+			return nil, fmt.Errorf("%s", err)
+		}
+		ccInfo := &ChaincodeInfo{ParentChaincodeName: parentCCName}
+		err = putChaincodeInfo(lgr, ccName, ccInfo)
+		if err != nil {
+			chaincodeLogger.Debug("Error...putChaincodeInfo:%s", err)
+			markTxFinish(lgr, t, false)
+			return nil, err
+		}
+		chaincodeLogger.Debug("Finishing Tx :-)")
+		markTxFinish(lgr, t, true)
+	} else if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
 		//will launch if necessary (and wait for ready)
 		cID, cMsg, err := chain.Launch(ctxt, t)
 		if err != nil {
@@ -201,4 +263,49 @@ func markTxFinish(ledger *ledger.Ledger, t *pb.Transaction, successful bool) {
 		return
 	}
 	ledger.TxFinished(t.Uuid, successful)
+}
+
+func extractChaincodeDeploymentSpec(tx *pb.Transaction) (*pb.ChaincodeDeploymentSpec, error) {
+	cds := &pb.ChaincodeDeploymentSpec{}
+	err := proto.Unmarshal(tx.Payload, cds)
+	if err != nil {
+		return nil, err
+	}
+	return cds, nil
+}
+
+func chaincodeExists(lgr *ledger.Ledger, chaincodeName string) (bool, error) {
+	ccInfo, err := getChaincodeInfo(lgr, chaincodeName)
+	if err != nil {
+		return false, err
+	}
+	return ccInfo != nil, nil
+}
+
+func getChaincodeInfo(lgr *ledger.Ledger, chaincodeName string) (*ChaincodeInfo, error) {
+	buf, err := lgr.GetState(chaincodeInfoNameSpace, chaincodeName, false)
+	if err != nil {
+		return nil, err
+	}
+	if buf == nil {
+		return nil, nil
+	}
+	chaincodeInfo := &ChaincodeInfo{}
+	err = proto.Unmarshal(buf, chaincodeInfo)
+	if err != nil {
+		return nil, err
+	}
+	return chaincodeInfo, nil
+}
+
+func putChaincodeInfo(lgr *ledger.Ledger, chaincodeName string, info *ChaincodeInfo) error {
+	buf, err := proto.Marshal(info)
+	if err != nil {
+		return err
+	}
+	return lgr.SetState(chaincodeInfoNameSpace, chaincodeName, buf)
+}
+
+func constructChaincodeBytesKey(chaincodeName string) string {
+	return fmt.Sprintf("%s_%s", chaincodeName, "bytes")
 }

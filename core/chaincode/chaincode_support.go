@@ -371,7 +371,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, t *pb.
 	var initargs []string
 
 	cds := &pb.ChaincodeDeploymentSpec{}
-	if t.Type == pb.Transaction_CHAINCODE_DEPLOY {
+	if t.Type == pb.Transaction_CHAINCODE_DEPLOY || t.Type == pb.Transaction_CHAINCODE_UPGRADE {
 		err := proto.Unmarshal(t.Payload, cds)
 		if err != nil {
 			return nil, nil, err
