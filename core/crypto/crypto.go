@@ -35,6 +35,9 @@ type Client interface {
 	// NewChaincodeDeployTransaction is used to deploy chaincode.
 	NewChaincodeDeployTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error)
 
+	// NewChaincodeUpgradeTransaction is used to upgrade chaincode.
+	NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error)
+
 	// NewChaincodeExecute is used to execute chaincode's functions.
 	NewChaincodeExecute(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error)
 

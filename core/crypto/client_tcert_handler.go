@@ -84,6 +84,10 @@ func (handler *tCertTransactionHandlerImpl) NewChaincodeDeployTransaction(chainc
 	return handler.tCertHandler.client.newChaincodeDeployUsingTCert(chaincodeDeploymentSpec, uuid, handler.tCertHandler.tCert, handler.nonce)
 }
 
+// NewChaincodeUpgradeTransaction is used to deploy chaincode.
+func (handler *tCertTransactionHandlerImpl) NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error) {
+	return handler.tCertHandler.client.newChaincodeUpgradeUsingTCert(chaincodeDeploymentSpec, uuid, handler.tCertHandler.tCert, handler.nonce)
+}
 // NewChaincodeExecute is used to execute chaincode's functions.
 func (handler *tCertTransactionHandlerImpl) NewChaincodeExecute(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error) {
 	return handler.tCertHandler.client.newChaincodeExecuteUsingTCert(chaincodeInvocation, uuid, handler.tCertHandler.tCert, handler.nonce)

@@ -18,8 +18,22 @@ func (client *clientImpl) createTransactionNonce() ([]byte, error) {
 }
 
 func (client *clientImpl) createDeployTx(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+	return client.createTxFromDeploymentSpec(obc.Transaction_CHAINCODE_DEPLOY, chaincodeDeploymentSpec, uuid, nonce)
+}
+
+func (client *clientImpl) createUpgradeTx(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+	return client.createTxFromDeploymentSpec(obc.Transaction_CHAINCODE_UPGRADE, chaincodeDeploymentSpec, uuid, nonce)
+}
+
+func (client *clientImpl) createTxFromDeploymentSpec(typ obc.Transaction_Type, chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
 	// Create a new transaction
-	tx, err := obc.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, uuid)
+	var tx *obc.Transaction
+	var err error
+	if typ == obc.Transaction_CHAINCODE_DEPLOY {
+		tx, err = obc.NewChaincodeDeployTransaction(chaincodeDeploymentSpec, uuid)
+	} else {
+		tx, err = obc.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, uuid)
+	}
 	if err != nil {
 		client.error("Failed creating new transaction [%s].", err.Error())
 		return nil, err
@@ -144,8 +158,23 @@ func (client *clientImpl) createQueryTx(chaincodeInvocation *obc.ChaincodeInvoca
 }
 
 func (client *clientImpl) newChaincodeDeployUsingTCert(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
+	return client.newChaincodeUsingTCert(obc.Transaction_CHAINCODE_DEPLOY, chaincodeDeploymentSpec, uuid, tCert, nonce)
+}
+
+func (client *clientImpl) newChaincodeUpgradeUsingTCert(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
+	return client.newChaincodeUsingTCert(obc.Transaction_CHAINCODE_UPGRADE, chaincodeDeploymentSpec, uuid, tCert, nonce)
+}
+
+func (client *clientImpl) newChaincodeUsingTCert(typ obc.Transaction_Type, chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
 	// Create a new transaction
-	tx, err := client.createDeployTx(chaincodeDeploymentSpec, uuid, nonce)
+	var tx *obc.Transaction
+	var err error
+	if typ == obc.Transaction_CHAINCODE_DEPLOY {
+		tx, err = client.createDeployTx(chaincodeDeploymentSpec, uuid, nonce)
+	} else {
+		tx, err = client.createUpgradeTx(chaincodeDeploymentSpec, uuid, nonce)
+	}
+
 	if err != nil {
 		client.error("Failed creating new deploy transaction [%s].", err.Error())
 		return nil, err
@@ -255,8 +284,23 @@ func (client *clientImpl) newChaincodeQueryUsingTCert(chaincodeInvocation *obc.C
 }
 
 func (client *clientImpl) newChaincodeDeployUsingECert(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+	return client.newChaincodeUsingECert(obc.Transaction_CHAINCODE_DEPLOY, chaincodeDeploymentSpec, uuid, nonce)
+}
+
+func (client *clientImpl) newChaincodeUpgradeUsingECert(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+	return client.newChaincodeUsingECert(obc.Transaction_CHAINCODE_UPGRADE, chaincodeDeploymentSpec, uuid, nonce)
+}
+
+func (client *clientImpl) newChaincodeUsingECert(typ obc.Transaction_Type, chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
 	// Create a new transaction
-	tx, err := client.createDeployTx(chaincodeDeploymentSpec, uuid, nonce)
+	var tx *obc.Transaction
+	var err error
+	if typ == obc.Transaction_CHAINCODE_DEPLOY {
+		tx, err = client.createDeployTx(chaincodeDeploymentSpec, uuid, nonce)
+	} else {
+		tx, err = client.createUpgradeTx(chaincodeDeploymentSpec, uuid, nonce)
+	}
+
 	if err != nil {
 		client.error("Failed creating new deploy transaction [%s].", err.Error())
 		return nil, err

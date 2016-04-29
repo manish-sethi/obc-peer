@@ -88,6 +88,10 @@ func (handler *eCertTransactionHandlerImpl) NewChaincodeDeployTransaction(chainc
 	return handler.client.newChaincodeDeployUsingECert(chaincodeDeploymentSpec, uuid, handler.nonce)
 }
 
+// NewChaincodeUpgradeTransaction is used to upgrade chaincode.
+func (handler *eCertTransactionHandlerImpl) NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error) {
+	return handler.client.newChaincodeUpgradeUsingECert(chaincodeDeploymentSpec, uuid, handler.nonce)
+}
 // NewChaincodeExecute is used to execute chaincode's functions.
 func (handler *eCertTransactionHandlerImpl) NewChaincodeExecute(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error) {
 	return handler.client.newChaincodeExecuteUsingECert(chaincodeInvocation, uuid, handler.nonce)

@@ -41,6 +41,15 @@ type clientImpl struct {
 
 // NewChaincodeDeployTransaction is used to deploy chaincode.
 func (client *clientImpl) NewChaincodeDeployTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error) {
+	return client.newChaincodeTransaction(obc.Transaction_CHAINCODE_DEPLOY, chaincodeDeploymentSpec, uuid)
+}
+
+// NewChaincodeUpgradeTransaction is used to upgrade chaincode.
+func (client *clientImpl) NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error) {
+	return client.newChaincodeTransaction(obc.Transaction_CHAINCODE_UPGRADE, chaincodeDeploymentSpec, uuid)
+}
+
+func (client *clientImpl) newChaincodeTransaction(typ obc.Transaction_Type, chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error) {
 	// Verify that the client is initialized
 	if !client.isInitialized {
 		return nil, utils.ErrNotInitialized
@@ -54,7 +63,10 @@ func (client *clientImpl) NewChaincodeDeployTransaction(chaincodeDeploymentSpec 
 	}
 
 	// Create Transaction
-	return client.newChaincodeDeployUsingTCert(chaincodeDeploymentSpec, uuid, tCert, nil)
+	if typ == obc.Transaction_CHAINCODE_DEPLOY {
+		return client.newChaincodeDeployUsingTCert(chaincodeDeploymentSpec, uuid, tCert, nil)
+	}
+	return client.newChaincodeUpgradeUsingTCert(chaincodeDeploymentSpec, uuid, tCert, nil)
 }
 
 // GetNextTCert Gets next available (not yet used) transaction certificate.

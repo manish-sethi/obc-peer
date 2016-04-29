@@ -247,12 +247,34 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 
 	// Now create the Transactions message and send to Peer.
 	transID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+
 	var tx *pb.Transaction
-	devopsLogger.Debug("Creating upgrade transaction (%s)", transID)
-	tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, transID)
-	if err != nil {
-		return nil, fmt.Errorf("Error upgrading chaincode: %s ", err)
+	var sec crypto.Client
+
+	if viper.GetBool("security.enabled") {
+		devopsLogger.Debug("Initializing secure devops using context %s", spec.SecureContext)
+		sec, err = crypto.InitClient(spec.SecureContext, nil)
+		defer crypto.CloseClient(sec)
+
+		// remove the security context since we are no longer need it down stream
+		spec.SecureContext = ""
+
+		if nil != err {
+			return nil, err
+		}
+		devopsLogger.Debug("Creating secure transaction %s", transID)
+		tx, err = sec.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, transID)
+		if nil != err {
+			return nil, err
+		}
+	} else {
+		devopsLogger.Debug("Creating upgrade transaction (%s)", transID)
+		tx, err = pb.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, transID)
+		if err != nil {
+			return nil, fmt.Errorf("Error deploying chaincode: %s ", err)
+		}
 	}
+
 	resp := d.coord.ExecuteTransaction(tx)
 	if resp.Status == pb.Response_FAILURE {
 		err = fmt.Errorf(string(resp.Msg))
