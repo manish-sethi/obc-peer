@@ -109,7 +109,8 @@ func (*Devops) getChaincodeBytes(context context.Context, spec *pb.ChaincodeSpec
 	return chaincodeDeploymentSpec, nil
 }
 
-// Deploy deploys the supplied chaincode image to the validators through a transaction
+// Deploy deploys the supplied chaincode image to the validators via the uber chaincode
+//  ----- Not used currently----
 func (d *Devops) DeployViaUber(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	// get the deployment spec
 	chaincodeDeploymentSpec, err := d.getChaincodeBytes(ctx, spec)
@@ -199,6 +200,8 @@ func (d *Devops) Deploy(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chainc
 	return chaincodeDeploymentSpec, err
 }
 
+// Upgrade upgrades the supplied chaincode image to the validators via the uber chaincode
+//  ----- Not used currently----
 func (d *Devops) UpgradeViaUber(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	if spec.ChaincodeID.Parent == "" {
 		err := fmt.Errorf("Parent missing in upgrade chaincode spec: %v", spec)
@@ -233,6 +236,7 @@ func (d *Devops) UpgradeViaUber(ctx context.Context, spec *pb.ChaincodeSpec) (*p
 	return chaincodeDeploymentSpec, err
 }
 
+// Upgrade upgrades the supplied chaincode image to the validators
 func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.ChaincodeDeploymentSpec, error) {
 	if spec.ChaincodeID.Parent == "" {
 		err := fmt.Errorf("Parent missing in upgrade chaincode spec: %v", spec)

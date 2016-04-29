@@ -126,7 +126,7 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 			markTxFinish(lgr, t, false)
 			return nil, err
 		}
-		chaincodeLogger.Debug("Finishing Tx :-)")
+		chaincodeLogger.Debug("Finishing Upgrade Tx")
 		markTxFinish(lgr, t, true)
 	} else if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
 		//will launch if necessary (and wait for ready)
