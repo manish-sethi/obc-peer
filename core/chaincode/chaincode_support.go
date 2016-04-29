@@ -348,18 +348,48 @@ func (chaincodeSupport *ChaincodeSupport) Stop(context context.Context, cds *pb.
 		//but proceed to cleanup
 	}
 
+	chaincodeSupport.removeFromChaincodeSupport(chaincode)
+
+	return err
+}
+
+//Remove stops a chaincode if running and removes the image
+func (chaincodeSupport *ChaincodeSupport) Remove(context context.Context, cds *pb.ChaincodeDeploymentSpec) error {
+	chaincode := cds.ChaincodeSpec.ChaincodeID.Name
+	if chaincode == "" {
+		return fmt.Errorf("chaincode name not set")
+	}
+
+	//remove the chaincode image, force will stop running chaincode and remove the container
+	rir := container.RemoveImageReq{CCID: ccintf.CCID{ChaincodeSpec: cds.ChaincodeSpec, NetworkID: chaincodeSupport.peerNetworkID, PeerID: chaincodeSupport.peerID}, Force: true}
+
+	vmtype, _ := chaincodeSupport.getVMType(cds)
+
+	_, err := container.VMCProcess(context, vmtype, rir)
+	if err != nil {
+		err = fmt.Errorf("Error removing image: %s", err)
+		//but proceed to cleanup
+	}
+
+	chaincodeSupport.removeFromChaincodeSupport(chaincode)
+
+	return err
+}
+
+
+func (chaincodeSupport *ChaincodeSupport) removeFromChaincodeSupport(chaincode string) error {
 	chaincodeSupport.runningChaincodes.Lock()
 	if _, ok := chaincodeSupport.chaincodeHasBeenLaunched(chaincode); !ok {
 		//nothing to do
 		chaincodeSupport.runningChaincodes.Unlock()
-		return nil
+		return fmt.Errorf("chaincode %s not registered", chaincode)
 	}
 
 	delete(chaincodeSupport.runningChaincodes.chaincodeMap, chaincode)
 
 	chaincodeSupport.runningChaincodes.Unlock()
 
-	return err
+	return nil
 }
 
 // LaunchChaincode will launch the chaincode if not running (if running return nil) and will wait for handler of the chaincode to get into FSM ready state.
