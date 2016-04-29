@@ -286,6 +286,45 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 	return chaincodeDeploymentSpec, err
 }
 
+// Terminate termiates the supplied chaincode 
+func (d *Devops) Terminate(ctx context.Context, chaincodeSpec *pb.ChaincodeSpec) (*pb.Response, error) {
+	if chaincodeSpec.ChaincodeID.Name == "" {
+		return nil, fmt.Errorf("name not given for terminate")
+	}
+
+	// Now create the Transactions message and send to Peer.
+	uuid := util.GenerateUUID()
+	var transaction *pb.Transaction
+	var err error
+	var sec crypto.Client
+	if viper.GetBool("security.enabled") {
+		devopsLogger.Debug("Initializing secure devops using context %s", chaincodeSpec.SecureContext)
+		sec, err = crypto.InitClient(chaincodeSpec.SecureContext, nil)
+		defer crypto.CloseClient(sec)
+		// remove the security context since we are no longer need it down stream
+		chaincodeSpec.SecureContext = ""
+		if nil != err {
+			return nil, err
+		}
+		devopsLogger.Debug("Creating secure terminate transaction %s", uuid)
+		transaction, err = sec.NewChaincodeTerminate(chaincodeSpec, uuid)
+	} else {
+		devopsLogger.Debug("Creating terminate transaction (%s)", uuid)
+		transaction, err = pb.NewChaincodeTerminate(chaincodeSpec, uuid)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	devopsLogger.Debug("Sending terminate transaction (%s) to validator", transaction.Uuid)
+
+	resp := d.coord.ExecuteTransaction(transaction)
+	if resp.Status == pb.Response_FAILURE {
+		err = fmt.Errorf(string(resp.Msg))
+	}
+	return resp, err
+}
+
 func (d *Devops) invokeOrQuery(ctx context.Context, chaincodeInvocationSpec *pb.ChaincodeInvocationSpec, invoke bool) (*pb.Response, error) {
 
 	if chaincodeInvocationSpec.ChaincodeSpec.ChaincodeID.Name == "" {

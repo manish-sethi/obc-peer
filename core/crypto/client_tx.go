@@ -157,6 +157,48 @@ func (client *clientImpl) createQueryTx(chaincodeInvocation *obc.ChaincodeInvoca
 	return tx, nil
 }
 
+func (client *clientImpl) createTerminateTx(chaincodeSpec *obc.ChaincodeSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+	// Create a new transaction
+	tx, err := obc.NewChaincodeTerminate(chaincodeSpec, uuid)
+	if err != nil {
+		client.error("Failed creating new transaction [%s].", err.Error())
+		return nil, err
+	}
+
+	// Copy metadata from ChaincodeSpec
+	tx.Metadata = chaincodeSpec.Metadata
+
+	if nonce == nil {
+		tx.Nonce, err = utils.GetRandomBytes(utils.NonceSize)
+		if err != nil {
+			client.error("Failed creating nonce [%s].", err.Error())
+			return nil, err
+		}
+	} else {
+		// TODO: check that it is a well formed nonce
+		tx.Nonce = nonce
+	}
+
+	// Handle confidentiality
+	if chaincodeSpec.ConfidentialityLevel == obc.ConfidentialityLevel_CONFIDENTIAL {
+		// 1. set confidentiality level and nonce
+		tx.ConfidentialityLevel = obc.ConfidentialityLevel_CONFIDENTIAL
+
+		// 2. set confidentiality protocol version
+		tx.ConfidentialityProtocolVersion = "1.2"
+
+		// 3. encrypt tx
+		err = client.encryptTx(tx)
+		if err != nil {
+			client.error("Failed encrypting payload [%s].", err.Error())
+			return nil, err
+
+		}
+	}
+
+	return tx, nil
+}
+
 func (client *clientImpl) newChaincodeDeployUsingTCert(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
 	return client.newChaincodeUsingTCert(obc.Transaction_CHAINCODE_DEPLOY, chaincodeDeploymentSpec, uuid, tCert, nonce)
 }
@@ -251,6 +293,43 @@ func (client *clientImpl) newChaincodeQueryUsingTCert(chaincodeInvocation *obc.C
 	tx, err := client.createQueryTx(chaincodeInvocation, uuid, nonce)
 	if err != nil {
 		client.error("Failed creating new query transaction [%s].", err.Error())
+		return nil, err
+	}
+
+	// Sign the transaction
+
+	// Append the certificate to the transaction
+	client.debug("Appending certificate [% x].", tCert.GetCertificate().Raw)
+	tx.Cert = tCert.GetCertificate().Raw
+
+	// Sign the transaction and append the signature
+	// 1. Marshall tx to bytes
+	rawTx, err := proto.Marshal(tx)
+	if err != nil {
+		client.error("Failed marshaling tx [%s].", err.Error())
+		return nil, err
+	}
+
+	// 2. Sign rawTx and check signature
+	rawSignature, err := tCert.Sign(rawTx)
+	if err != nil {
+		client.error("Failed creating signature [% x]: [%s].", err.Error())
+		return nil, err
+	}
+
+	// 3. Append the signature
+	tx.Signature = rawSignature
+
+	client.debug("Appending signature [% x].", rawSignature)
+
+	return tx, nil
+}
+
+func (client *clientImpl) newChaincodeTerminateUsingTCert(chaincodeSpec *obc.ChaincodeSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
+	// Create a new transaction
+	tx, err := client.createTerminateTx(chaincodeSpec, uuid, nonce)
+	if err != nil {
+		client.error("Failed creating new terminate transaction [%s].", err.Error())
 		return nil, err
 	}
 
@@ -409,6 +488,42 @@ func (client *clientImpl) newChaincodeQueryUsingECert(chaincodeInvocation *obc.C
 	return tx, nil
 }
 
+func (client *clientImpl) newChaincodeTerminateUsingECert(chaincodeSpec *obc.ChaincodeSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+	// Create a new transaction
+	tx, err := client.createTerminateTx(chaincodeSpec, uuid, nonce)
+	if err != nil {
+		client.error("Failed creating new terminate transaction [%s].", err.Error())
+		return nil, err
+	}
+
+	// Sign the transaction
+
+	// Append the certificate to the transaction
+	client.debug("Appending certificate [% x].", client.enrollCert.Raw)
+	tx.Cert = client.enrollCert.Raw
+
+	// Sign the transaction and append the signature
+	// 1. Marshall tx to bytes
+	rawTx, err := proto.Marshal(tx)
+	if err != nil {
+		client.error("Failed marshaling tx [%s].", err.Error())
+		return nil, err
+	}
+
+	// 2. Sign rawTx and check signature
+	rawSignature, err := client.signWithEnrollmentKey(rawTx)
+	if err != nil {
+		client.error("Failed creating signature [% x]: [%s].", rawTx, err.Error())
+		return nil, err
+	}
+
+	// 3. Append the signature
+	tx.Signature = rawSignature
+
+	client.debug("Appending signature [% x].", rawSignature)
+
+	return tx, nil
+}
 // CheckTransaction is used to verify that a transaction
 // is well formed with the respect to the security layer
 // prescriptions. To be used for internal verifications.

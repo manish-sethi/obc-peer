@@ -93,6 +93,8 @@ type DevopsClient interface {
 	Query(ctx context.Context, in *ChaincodeInvocationSpec, opts ...grpc.CallOption) (*Response, error)
 	// Upgrade the chaincode package to the chain.
 	Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*ChaincodeDeploymentSpec, error)
+	// Terminate the chaincode. This will remove the chaincode state data
+	Terminate(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*Response, error)
 }
 
 type devopsClient struct {
@@ -157,6 +159,15 @@ func (c *devopsClient) Upgrade(ctx context.Context, in *ChaincodeSpec, opts ...g
 	return out, nil
 }
 
+func (c *devopsClient) Terminate(ctx context.Context, in *ChaincodeSpec, opts ...grpc.CallOption) (*Response, error) {
+	out := new(Response)
+	err := grpc.Invoke(ctx, "/protos.Devops/Terminate", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Server API for Devops service
 
 type DevopsServer interface {
@@ -173,6 +184,8 @@ type DevopsServer interface {
 	Query(context.Context, *ChaincodeInvocationSpec) (*Response, error)
 	// Upgrade the chaincode package to the chain.
 	Upgrade(context.Context, *ChaincodeSpec) (*ChaincodeDeploymentSpec, error)
+	// Terminate the chaincode. This will remove the chaincode state data
+	Terminate(context.Context, *ChaincodeSpec) (*Response, error)
 }
 
 func RegisterDevopsServer(s *grpc.Server, srv DevopsServer) {
@@ -251,6 +264,18 @@ func _Devops_Upgrade_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return out, nil
 }
 
+func _Devops_Terminate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
+	in := new(ChaincodeSpec)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	out, err := srv.(DevopsServer).Terminate(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 var _Devops_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "protos.Devops",
 	HandlerType: (*DevopsServer)(nil),
@@ -278,6 +303,10 @@ var _Devops_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Upgrade",
 			Handler:    _Devops_Upgrade_Handler,
+		},
+		{
+			MethodName: "Terminate",
+			Handler:    _Devops_Terminate_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{},

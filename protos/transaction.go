@@ -136,3 +136,25 @@ func NewChaincodeExecute(chaincodeInvocationSpec *ChaincodeInvocationSpec, uuid 
 	transaction.Payload = data
 	return transaction, nil
 }
+
+// NewChaincodeTerminate is used to terminate a chaincode.
+func NewChaincodeTerminate(chaincodeSpec *ChaincodeSpec, uuid string) (*Transaction, error) {
+	transaction := new(Transaction)
+	transaction.Type = Transaction_CHAINCODE_TERMINATE
+	transaction.Uuid = uuid
+	transaction.Timestamp = util.CreateUtcTimestamp()
+	cID := chaincodeSpec.GetChaincodeID()
+	if cID != nil {
+		data, err := proto.Marshal(cID)
+		if err != nil {
+			return nil, fmt.Errorf("Could not marshal chaincode : %s", err)
+		}
+		transaction.ChaincodeID = data
+	}
+	data, err := proto.Marshal(chaincodeSpec)
+	if err != nil {
+		return nil, fmt.Errorf("Could not marshal payload for chaincode termination: %s", err)
+	}
+	transaction.Payload = data
+	return transaction, nil
+}

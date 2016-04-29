@@ -45,6 +45,9 @@ service Devops {
     // Upgrade the chaincode package to the chain.
     rpc Upgrade(ChaincodeSpec) returns (ChaincodeDeploymentSpec) {}
 
+    // Terminate the chaincode. This will remove the chaincode state data
+    rpc Terminate(ChaincodeSpec) returns (Response) {}
+
 }
 
 

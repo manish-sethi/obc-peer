@@ -101,3 +101,8 @@ func (handler *eCertTransactionHandlerImpl) NewChaincodeExecute(chaincodeInvocat
 func (handler *eCertTransactionHandlerImpl) NewChaincodeQuery(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error) {
 	return handler.client.newChaincodeQueryUsingECert(chaincodeInvocation, uuid, handler.nonce)
 }
+
+// NewChaincodeTerminate is used to terminate a chaincode
+func (handler *eCertTransactionHandlerImpl) NewChaincodeTerminate(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error) {
+	return handler.client.newChaincodeTerminateUsingECert(chaincodeSpec, uuid, handler.nonce)
+}

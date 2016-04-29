@@ -44,6 +44,9 @@ type Client interface {
 	// NewChaincodeQuery is used to query chaincode's functions.
 	NewChaincodeQuery(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error)
 
+	// NewChaincodeTerminate is used to terminate a chaincode
+	NewChaincodeTerminate(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error)
+
 	// DecryptQueryResult is used to decrypt the result of a query transaction
 	DecryptQueryResult(queryTx *obc.Transaction, result []byte) ([]byte, error)
 
