@@ -229,6 +229,16 @@ var chaincodeQueryCmd = &cobra.Command{
 	},
 }
 
+var chaincodeTerminateCmd = &cobra.Command{
+	Use:       "terminate",
+	Short:     fmt.Sprintf("Upgrade the specified %s to the network.", chainFuncName),
+	Long:      fmt.Sprintf(`Upgrade the specified %s to the network.`, chainFuncName),
+	ValidArgs: []string{"1"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return chaincodeTerminate(cmd, args)
+	},
+}
+
 func main() {
 	// For environment variables.
 	viper.SetEnvPrefix(cmdRoot)
@@ -302,10 +312,11 @@ func main() {
 
 	chaincodeCmd.PersistentFlags().StringVarP(&chaincodeParentName, "parentname", "P", undefinedParamValue, fmt.Sprintf("Name of the parent chaincode for the deploy transaction"))
 
-	chaincodeCmd.AddCommand(chaincodeUpgradeCmd)
 	chaincodeCmd.AddCommand(chaincodeDeployCmd)
 	chaincodeCmd.AddCommand(chaincodeInvokeCmd)
 	chaincodeCmd.AddCommand(chaincodeQueryCmd)
+	chaincodeCmd.AddCommand(chaincodeUpgradeCmd)
+	chaincodeCmd.AddCommand(chaincodeTerminateCmd)
 
 	mainCmd.AddCommand(chaincodeCmd)
 
@@ -732,35 +743,38 @@ func checkChaincodeCmdParams(cmd *cobra.Command) (err error) {
 		}
 	}
 
-	// Check that non-empty chaincode parameters contain only Function and
-	// Args keys. Type checking is done later when the JSON is actually
-	// unmarshaled into a pb.ChaincodeInput. To better understand what's going
-	// on here with JSON parsing see http://blog.golang.org/json-and-go -
-	// Generic JSON with interface{}
-	if chaincodeCtorJSON != "{}" {
-		var f interface{}
-		err = json.Unmarshal([]byte(chaincodeCtorJSON), &f)
-		if err != nil {
-			err = fmt.Errorf("Chaincode argument error: %s", err)
-			return
-		}
-		m := f.(map[string]interface{})
-		if len(m) != 2 {
-			err = fmt.Errorf("Non-empty JSON chaincode parameters must contain exactly 2 keys - 'Function' and 'Args'")
-			return
-		}
-		for k := range m {
-			switch strings.ToLower(k) {
-			case "function":
-			case "args":
-			default:
-				err = fmt.Errorf("Illegal chaincode key '%s' - must be either 'Function' or 'Args'", k)
+	//chaincode terminate does not send anything to the chaincode
+	if cmd.Use != "terminate"  {
+		// Check that non-empty chaincode parameters contain only Function and
+		// Args keys. Type checking is done later when the JSON is actually
+		// unmarshaled into a pb.ChaincodeInput. To better understand what's going
+		// on here with JSON parsing see http://blog.golang.org/json-and-go -
+		// Generic JSON with interface{}
+		if chaincodeCtorJSON != "{}" {
+			var f interface{}
+			err = json.Unmarshal([]byte(chaincodeCtorJSON), &f)
+			if err != nil {
+				err = fmt.Errorf("Chaincode argument error: %s", err)
 				return
 			}
+			m := f.(map[string]interface{})
+			if len(m) != 2 {
+				err = fmt.Errorf("Non-empty JSON chaincode parameters must contain exactly 2 keys - 'Function' and 'Args'")
+				return
+			}
+			for k, _ := range m {
+				switch strings.ToLower(k) {
+				case "function":
+				case "args":
+				default:
+					err = fmt.Errorf("Illegal chaincode key '%s' - must be either 'Function' or 'Args'", k)
+					return
+				}
+			}
+		} else {
+			err = errors.New("Empty JSON chaincode parameters must contain exactly 2 keys - 'Function' and 'Args'")
+			return
 		}
-	} else {
-		err = errors.New("Empty JSON chaincode parameters must contain exactly 2 keys - 'Function' and 'Args'")
-		return
 	}
 
 	return
@@ -1047,6 +1061,81 @@ func chaincodeInvokeOrQuery(cmd *cobra.Command, args []string, invoke bool) (err
 			}
 		}
 	}
+	return nil
+}
+
+// chaincodeTerminate terminates the chaincode (deletes state and image)
+func chaincodeTerminate(cmd *cobra.Command, args []string) (err error) {
+
+	if err = checkChaincodeCmdParams(cmd); err != nil {
+		return
+	}
+
+	if chaincodeName == "" {
+		err = errors.New("Name not given for terminate")
+		return
+	}
+
+	devopsClient, err := getDevopsClient(cmd)
+	if err != nil {
+		err = fmt.Errorf("Error building %s: %s", chainFuncName, err)
+		return
+	}
+	chaincodeLang = strings.ToUpper(chaincodeLang)
+	spec := &pb.ChaincodeSpec{Type: pb.ChaincodeSpec_Type(pb.ChaincodeSpec_Type_value[chaincodeLang]),
+		ChaincodeID: &pb.ChaincodeID{Name: chaincodeName}}
+
+	// If security is enabled, add client login token
+	if viper.GetBool("security.enabled") {
+		if chaincodeUsr == undefinedParamValue {
+			err = errors.New("Must supply username for chaincode when security is enabled")
+			return
+		}
+
+		// Retrieve the CLI data storage path
+		localStore := getCliFilePath()
+
+		// Check if the user is logged in before sending transaction
+		if _, err = os.Stat(localStore + "loginToken_" + chaincodeUsr); err == nil {
+			logger.Info("Local user '%s' is already logged in. Retrieving login token.\n", chaincodeUsr)
+
+			// Read in the login token
+			token, err := ioutil.ReadFile(localStore + "loginToken_" + chaincodeUsr)
+			if err != nil {
+				panic(fmt.Errorf("Fatal error when reading client login token: %s\n", err))
+			}
+
+			// Add the login token to the chaincodeSpec
+			spec.SecureContext = string(token)
+
+			// If privacy is enabled, mark chaincode as confidential
+			if viper.GetBool("security.privacy") {
+				logger.Info("Set confidentiality level to CONFIDENTIAL.\n")
+				spec.ConfidentialityLevel = pb.ConfidentialityLevel_CONFIDENTIAL
+			}
+		} else {
+			// Check if the token is not there and fail
+			if os.IsNotExist(err) {
+				err = fmt.Errorf("User '%s' not logged in. Use the 'login' command to obtain a security token.", chaincodeUsr)
+				return
+			}
+			// Unexpected error
+			panic(fmt.Errorf("Fatal error when checking for client login token: %s\n", err))
+		}
+	}
+
+	var resp *pb.Response
+	resp, err = devopsClient.Terminate(context.Background(), spec)
+
+	if err != nil {
+		err = fmt.Errorf("Error terminating %s: %s\n", chainFuncName, err)
+		return
+	}
+
+	transactionID := string(resp.Msg)
+	logger.Info("Successfully terminated : %s(%s)", spec, transactionID)
+	fmt.Println(transactionID)
+
 	return nil
 }
 

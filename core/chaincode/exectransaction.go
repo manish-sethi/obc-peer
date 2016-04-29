@@ -61,6 +61,11 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 			return nil, err
 		}
 		ccName := cds.ChaincodeSpec.ChaincodeID.Name
+		/*** this is a necessary check but commenting it out
+		     as its a change in current behavior. We should
+		     publicize and then add this check.
+		     Also when doing this, need to find an alternate
+		     route for system chaincode launch
 		ccExists, err := chaincodeExists(lgr, ccName)
 		if err != nil {
 			return nil, err
@@ -68,6 +73,7 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 		if ccExists {
 			return nil, fmt.Errorf("Chaincode [%s] already exists", ccName)
 		}
+		*****/
 		_, err = chain.Deploy(ctxt, t)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
