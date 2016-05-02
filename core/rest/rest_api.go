@@ -1105,6 +1105,152 @@ func (s *ServerOpenchainREST) Query(rw web.ResponseWriter, req *web.Request) {
 	}
 }
 
+// Upgrade first builds the chaincode package and subsequently upgrades it on the
+// blockchain.
+func (s *ServerOpenchainREST) Upgrade(rw web.ResponseWriter, req *web.Request) {
+	restLogger.Info("REST upgrading chaincode...")
+
+	// Decode the incoming JSON payload
+	var spec pb.ChaincodeSpec
+	err := jsonpb.Unmarshal(req.Body, &spec)
+
+	// Check for proper JSON syntax
+	if err != nil {
+		// Unmarshall returns a " character around unrecognized fields in the case
+		// of a schema validation failure. These must be replaced with a ' character.
+		// Otherwise, the returned JSON is invalid.
+		errVal := strings.Replace(err.Error(), "\"", "'", -1)
+
+		// Client must supply payload
+		if err == io.EOF {
+			rw.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(rw, "{\"Error\": \"Payload must contain a ChaincodeSpec.\"}")
+			restLogger.Error("{\"Error\": \"Payload must contain a ChaincodeSpec.\"}")
+		} else {
+			rw.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(rw, "{\"Error\": \"%s\"}", errVal)
+			restLogger.Error(fmt.Sprintf("{\"Error\": \"%s\"}", errVal))
+		}
+
+		return
+	}
+
+	// Currently we cannot test upgrade in dev mode
+	if viper.GetString("chaincode.mode") == chaincode.DevModeUserRunsChaincode {
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "{\"Error\": \"Upgrade cannot be done in development mode.\"}")
+		restLogger.Error("{\"Error\": \"Upgrade cannot be done in development mode.\"}")
+
+		return
+	}
+
+	// Check that the ChaincodeID is not nil.
+	if spec.ChaincodeID == nil {
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "{\"Error\": \"Payload must contain a ChaincodeID.\"}")
+		restLogger.Error("{\"Error\": \"Payload must contain a ChaincodeID.\"}")
+
+		return
+	}
+
+	// Check that the Chaincode path is not left blank.
+	if spec.ChaincodeID.Path == "" {
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "{\"Error\": \"Chaincode path may not be blank.\"}")
+		restLogger.Error("{\"Error\": \"Chaincode path may not be blank.\"}")
+
+		return
+	}
+
+	// Check that the Chaincode path is not left blank.
+	if spec.ChaincodeID.Parent == "" {
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "{\"Error\": \"Chaincode parent may not be blank.\"}")
+		restLogger.Error("{\"Error\": \"Chaincode parent may not be blank.\"}")
+
+		return
+	}
+
+	// Check that the CtorMsg is not left blank.
+	if (spec.CtorMsg == nil) || (spec.CtorMsg.Function == "") {
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "{\"Error\": \"Payload must contain a CtorMsg with a Chaincode function name.\"}")
+		restLogger.Error("{\"Error\": \"Payload must contain a CtorMsg with a Chaincode function name.\"}")
+
+		return
+	}
+
+	// If security is enabled, add client login token
+	if viper.GetBool("security.enabled") {
+		chaincodeUsr := spec.SecureContext
+		if chaincodeUsr == "" {
+			rw.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(rw, "{\"Error\": \"Must supply username for chaincode when security is enabled.\"}")
+			restLogger.Error("{\"Error\": \"Must supply username for chaincode when security is enabled.\"}")
+
+			return
+		}
+
+		// Retrieve the REST data storage path
+		// Returns /var/hyperledger/production/client/
+		localStore := getRESTFilePath()
+
+		// Check if the user is logged in before sending transaction
+		if _, err := os.Stat(localStore + "loginToken_" + chaincodeUsr); err == nil {
+			restLogger.Info("Local user '%s' is already logged in. Retrieving login token.\n", chaincodeUsr)
+
+			// Read in the login token
+			token, err := ioutil.ReadFile(localStore + "loginToken_" + chaincodeUsr)
+			if err != nil {
+				rw.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(rw, "{\"Error\": \"Fatal error -- %s\"}", err)
+				panic(fmt.Errorf("Fatal error when reading client login token: %s\n", err))
+			}
+
+			// Add the login token to the chaincodeSpec
+			spec.SecureContext = string(token)
+
+			// If privacy is enabled, mark chaincode as confidential
+			if viper.GetBool("security.privacy") {
+				spec.ConfidentialityLevel = pb.ConfidentialityLevel_CONFIDENTIAL
+			}
+		} else {
+			// Check if the token is not there and fail
+			if os.IsNotExist(err) {
+				rw.WriteHeader(http.StatusUnauthorized)
+				fmt.Fprintf(rw, "{\"Error\": \"User not logged in. Use the '/registrar' endpoint to obtain a security token.\"}")
+				restLogger.Error("{\"Error\": \"User not logged in. Use the '/registrar' endpoint to obtain a security token.\"}")
+
+				return
+			}
+			// Unexpected error
+			rw.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(rw, "{\"Error\": \"Fatal error -- %s\"}", err)
+			panic(fmt.Errorf("Fatal error when checking for client login token: %s\n", err))
+		}
+	}
+
+	// Deploy the ChaincodeSpec
+	chaincodeDeploymentSpec, err := s.devops.Upgrade(context.Background(), &spec)
+	if err != nil {
+		// Replace " characters with '
+		errVal := strings.Replace(err.Error(), "\"", "'", -1)
+
+		rw.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(rw, "{\"Error\": \"%s\"}", errVal)
+		restLogger.Error(fmt.Sprintf("{\"Error\": \"Deploying Chaincode -- %s\"}", errVal))
+
+		return
+	}
+
+	// Clients will need the chaincode name in order to invoke or query it
+	chainID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+
+	rw.WriteHeader(http.StatusOK)
+	fmt.Fprintf(rw, "{\"OK\": \"Successfully upgraded chainCode.\",\"message\":\""+chainID+"\"}")
+	restLogger.Info("Successfuly upgraded chainCode: " + chainID + ".\n")
+}
+
 // ProcessChaincode implements JSON RPC 2.0 specification for chaincode deploy, invoke, and query.
 func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.Request) {
 	restLogger.Info("REST processing chaincode request...")
@@ -1727,6 +1873,7 @@ func StartOpenchainRESTServer(server *ServerOpenchain, devops *core.Devops) {
 	router.Post("/devops/deploy", (*ServerOpenchainREST).Deploy)
 	router.Post("/devops/invoke", (*ServerOpenchainREST).Invoke)
 	router.Post("/devops/query", (*ServerOpenchainREST).Query)
+	router.Post("/devops/upgrade", (*ServerOpenchainREST).Upgrade)
 
 	// The /chaincode endpoint which superceedes the /devops endpoint from above
 	router.Post("/chaincode", (*ServerOpenchainREST).ProcessChaincode)

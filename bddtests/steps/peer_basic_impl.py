@@ -526,3 +526,78 @@ def step_impl(context):
        assert context.compose_returncode == 0, "docker-compose failed to start {0}".format(service)
        parseComposeOutput(context)
     print("After starting peers, the container service list is = {0}".format([containerData.composeService + ":" + containerData.ipAddress for  containerData in context.compose_containers]))
+
+#upgrade funcs
+@when(u'I upgrade chaincode "{chaincodeName}" with "{chaincodePath}" with ctor "{ctor}" to "{containerName}"')
+def step_impl(context, chaincodeName, chaincodePath, ctor, containerName):
+    # assume previous deploy of parent was done
+    parentName = context.chaincodeSpec['chaincodeID']['name']
+    ipAddress = ipFromContainerNamePart(containerName, context.compose_containers)
+    request_url = buildUrl(context, ipAddress, "/devops/upgrade")
+    print("Requesting path = {0}".format(request_url))
+    args = []
+    if 'table' in context:
+	   # There is ctor arguments
+	   args = context.table[0].cells
+    typeGolang = 1
+
+    # Create a ChaincodeSpec structure
+    chaincodeSpec = {
+        "type": typeGolang,
+        "chaincodeID": {
+            "path" : chaincodePath,
+            "name" : "",
+            "parent" : parentName
+        },
+        "ctorMsg":  {
+            "function" : ctor,
+            "args" : args
+        },
+        #"secureContext" : "binhn"
+    }
+    if 'userName' in context:
+        chaincodeSpec["secureContext"] = context.userName
+
+    resp = requests.post(request_url, headers={'Content-type': 'application/json'}, data=json.dumps(chaincodeSpec), verify=False)
+    assert resp.status_code == 200, "Failed to POST to %s:  %s" %(request_url, resp.text)
+    context.response = resp
+    upgradedChaincodeName = resp.json()['message']
+    chaincodeSpec['chaincodeID']['name'] = upgradedChaincodeName
+    context.upgradedChaincodeSpec = chaincodeSpec
+    print(json.dumps(chaincodeSpec, indent=4))
+    print("")
+
+@then(u'I should have received a upgraded chaincode name')
+def step_impl(context):
+    if 'chaincodeSpec' in context:
+        assert context.upgradedChaincodeSpec['chaincodeID']['name'] != ""
+        # Set the current transactionID to the name passed back
+        context.transactionID = context.upgradedChaincodeSpec['chaincodeID']['name']
+    else:
+        fail('chaincodeSpec not in context')
+
+@when(u'I query upgraded chaincode "{chaincodeName}" function name "{functionName}" on all peers')
+def step_impl(context, chaincodeName, functionName):
+    assert 'upgradedChaincodeSpec' in context, "upgradedChaincodeSpec not found in context"
+    assert 'compose_containers' in context, "compose_containers not found in context"
+    # Update the chaincodeSpec ctorMsg for invoke
+    args = []
+    if 'table' in context:
+       # There is ctor arguments
+       args = context.table[0].cells
+    context.upgradedChaincodeSpec['ctorMsg']['function'] = functionName
+    context.upgradedChaincodeSpec['ctorMsg']['args'] = args #context.table[0].cells if ('table' in context) else []
+    # Invoke the POST
+    chaincodeInvocationSpec = {
+        "chaincodeSpec" : context.upgradedChaincodeSpec
+    }
+    responses = []
+    for container in context.compose_containers:
+        request_url = buildUrl(context, container.ipAddress, "/devops/{0}".format(functionName))
+        print("POSTing path = {0}".format(request_url))
+        resp = requests.post(request_url, headers={'Content-type': 'application/json'}, data=json.dumps(chaincodeInvocationSpec), verify=False)
+        assert resp.status_code == 200, "Failed to POST to %s:  %s" %(request_url, resp.text)
+        responses.append(resp)
+    context.responses = responses
+
+

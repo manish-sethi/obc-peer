@@ -458,7 +458,7 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, t *pb.
 	//         5) query successfully retrives committed tx and calls sendInitOrReady
 	// See issue #710
 
-	if t.Type != pb.Transaction_CHAINCODE_DEPLOY {
+	if t.Type != pb.Transaction_CHAINCODE_DEPLOY && t.Type != pb.Transaction_CHAINCODE_UPGRADE {
 		ledger, ledgerErr := ledger.GetLedger()
 		if ledgerErr != nil {
 			return cID, cMsg, fmt.Errorf("Failed to get handle to ledger (%s)", ledgerErr)
