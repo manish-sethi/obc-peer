@@ -169,7 +169,7 @@ func (client *clientImpl) createTerminateTx(chaincodeSpec *obc.ChaincodeSpec, uu
 	tx.Metadata = chaincodeSpec.Metadata
 
 	if nonce == nil {
-		tx.Nonce, err = utils.GetRandomBytes(utils.NonceSize)
+		tx.Nonce, err = primitives.GetRandomNonce()
 		if err != nil {
 			client.error("Failed creating nonce [%s].", err.Error())
 			return nil, err

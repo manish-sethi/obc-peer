@@ -107,12 +107,12 @@ func GetTransaction(args []string) (*pb.Transaction, []byte, error) {
 func Deploy(t *pb.Transaction) error {
 	chaincodeSupport := chaincode.GetChain(chaincode.DefaultChain)
 	ctxt := context.Background()
-	_, err := chaincodeSupport.DeployChaincode(ctxt, t)
+	_, err := chaincodeSupport.Deploy(ctxt, t)
 	if err != nil {
 		return fmt.Errorf("Failed to deploy chaincode spec(%s)", err)
 	}
 	//launch and wait for ready
-	_, _, err = chaincodeSupport.LaunchChaincode(ctxt, t)
+	_, _, err = chaincodeSupport.Launch(ctxt, t)
 	if err != nil {
 		return fmt.Errorf("%s", err)
 	}
