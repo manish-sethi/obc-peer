@@ -88,6 +88,7 @@ func (handler *tCertTransactionHandlerImpl) NewChaincodeDeployTransaction(chainc
 func (handler *tCertTransactionHandlerImpl) NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec *obc.ChaincodeDeploymentSpec, uuid string) (*obc.Transaction, error) {
 	return handler.tCertHandler.client.newChaincodeUpgradeUsingTCert(chaincodeDeploymentSpec, uuid, handler.tCertHandler.tCert, handler.nonce)
 }
+
 // NewChaincodeExecute is used to execute chaincode's functions.
 func (handler *tCertTransactionHandlerImpl) NewChaincodeExecute(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error) {
 	return handler.tCertHandler.client.newChaincodeExecuteUsingTCert(chaincodeInvocation, uuid, handler.tCertHandler.tCert, handler.nonce)
@@ -98,7 +99,7 @@ func (handler *tCertTransactionHandlerImpl) NewChaincodeQuery(chaincodeInvocatio
 	return handler.tCertHandler.client.newChaincodeQueryUsingTCert(chaincodeInvocation, uuid, handler.tCertHandler.tCert, handler.nonce)
 }
 
-// NewChaincodeTerminate is used to terminate a chaincode
-func (handler *tCertTransactionHandlerImpl) NewChaincodeTerminate(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error) {
-	return handler.tCertHandler.client.newChaincodeTerminateUsingTCert(chaincodeSpec, uuid, handler.tCertHandler.tCert, handler.nonce)
+// NewChaincodeDestroy is used to destroy a chaincode
+func (handler *tCertTransactionHandlerImpl) NewChaincodeDestroy(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error) {
+	return handler.tCertHandler.client.newChaincodeDestroyUsingTCert(chaincodeSpec, uuid, handler.tCertHandler.tCert, handler.nonce)
 }

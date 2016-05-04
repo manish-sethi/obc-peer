@@ -533,8 +533,7 @@ def step_impl(context, chaincodeName, chaincodePath, ctor, containerName):
     # assume previous deploy of parent was done
     parentName = context.chaincodeSpec['chaincodeID']['name']
     ipAddress = ipFromContainerNamePart(containerName, context.compose_containers)
-    request_url = buildUrl(context, ipAddress, "/devops/upgrade")
-    print("Requesting path = {0}".format(request_url))
+    request_url = buildUrl(context, ipAddress, "/chaincode")
     args = []
     if 'table' in context:
 	   # There is ctor arguments
@@ -558,10 +557,19 @@ def step_impl(context, chaincodeName, chaincodePath, ctor, containerName):
     if 'userName' in context:
         chaincodeSpec["secureContext"] = context.userName
 
-    resp = requests.post(request_url, headers={'Content-type': 'application/json'}, data=json.dumps(chaincodeSpec), verify=False)
+    reqestPayload = {
+	    "jsonrpc": "2.0",
+        "method": "upgrade",
+ 	    "params": chaincodeSpec,
+ 	    "id": 5
+    }
+    print("POSTing path = {0}".format(request_url))
+    print(json.dumps(reqestPayload, indent = 4))
+    resp = requests.post(request_url, headers={'Content-type': 'application/json'}, data=json.dumps(reqestPayload), verify=False)
     assert resp.status_code == 200, "Failed to POST to %s:  %s" %(request_url, resp.text)
     context.response = resp
-    upgradedChaincodeName = resp.json()['message']
+    print("Response {0}".format(resp.text))
+    upgradedChaincodeName = resp.json()['result']['message']
     chaincodeSpec['chaincodeID']['name'] = upgradedChaincodeName
     context.upgradedChaincodeSpec = chaincodeSpec
     print(json.dumps(chaincodeSpec, indent=4))
@@ -600,4 +608,83 @@ def step_impl(context, chaincodeName, functionName):
         responses.append(resp)
     context.responses = responses
 
+#chaincode destroy funcs
+@when(u'I destroy chaincode on "{containerName}"')
+def step_impl(context, containerName):
+    # assume previous deploy of chaincode was done
+    assert 'chaincodeSpec' in context, "chaincodeSpec not found in context"
+    chaincodeName = context.chaincodeSpec['chaincodeID']['name']
+    ipAddress = ipFromContainerNamePart(containerName, context.compose_containers)
+    request_url = buildUrl(context, ipAddress, "/chaincode")
+    # Create a ChaincodeSpec structure
+    reqestPayload = {
+	    "jsonrpc": "2.0",
+        "method": "destroy",
+ 	    "params": {
+ 		    "chaincodeID": {
+ 			    "name":chaincodeName
+ 		    }
+ 	    },
+ 	    "id": 5
+    }
+    if 'userName' in context:
+        reqestPayload['params']['secureContext'] = context.userName
 
+    print("Requesting path = {0}".format(request_url))
+    print(json.dumps(reqestPayload, indent=4))
+    resp = requests.post(request_url, headers={'Content-type': 'application/json'}, data=json.dumps(reqestPayload), verify=False)
+    assert resp.status_code == 200, "Failed to POST to %s:  %s" %(request_url, resp.text)
+    context.response = resp
+    print("RESULT from peer {0}".format(containerName))
+    print(json.dumps(context.response.json(), indent = 4))
+    context.transactionID = context.response.json()['result']['message']
+    print("")
+
+@when(u'I query chaincode via RESTendpoint-chaincode function name "{functionName}" on all peers')
+def step_impl(context, functionName):
+    assert 'chaincodeSpec' in context, "chaincodeSpec not found in context"
+    assert 'compose_containers' in context, "compose_containers not found in context"
+    args = []
+    if 'table' in context:
+       args = context.table[0].cells
+
+    reqestPayload = {
+	    "jsonrpc": "2.0",
+	    "method": "query",
+	    "params": {
+	        "chaincodeID":{
+		        "name":context.chaincodeSpec['chaincodeID']['name']
+		    },
+	        "ctorMsg": {
+		        "function":functionName,
+			       "args":args
+		        }
+	    },
+	    "id": 5
+    }
+
+    # Invoke the POST
+    responses = []
+    for container in context.compose_containers:
+        request_url = buildUrl(context, container.ipAddress, "/chaincode")
+        print("POSTing path = {0}".format(request_url))
+        print(json.dumps(reqestPayload, indent = 4))
+        resp = requests.post(request_url, headers={'Content-type': 'application/json'}, data=json.dumps(reqestPayload), verify=False)
+        print("RESULT from {0} of chaincode from peer {1}".format(functionName, container.containerName))
+        print(json.dumps(resp.json(), indent = 4))
+        print(resp.status_code)
+        assert resp.status_code == 200, "Failed to POST to %s:  %s" %(request_url, resp.text)
+        responses.append(resp)
+    context.responses = responses
+
+@then(u'I should get a JSON response from all peers with path "{attributePath}" = "{expectedValue}"')
+def step_impl(context, attributePath, expectedValue):
+    attributePathSegments = attributePath.split(".")
+    assert 'responses' in context, "responses not found in context"
+    for resp in context.responses:
+        respJson = resp.json()
+        for attribute in attributePathSegments:
+            assert attribute in respJson, "Attribute path not found in response (%s)" %(attributePath)
+            respJson = respJson[attribute]
+        foundValue = respJson
+        assert (str(foundValue) == expectedValue), "For attribute path %s, expected (%s), instead found (%s)" % (attributePath, expectedValue, foundValue)

@@ -150,6 +150,7 @@ var (
 	ChaincodeDeployError     = &rpcError{Code: -32001, Message: "Deployment failure", Data: "Chaincode deployment has failed."}
 	ChaincodeInvokeError     = &rpcError{Code: -32002, Message: "Invocation failure", Data: "Chaincode invocation has failed."}
 	ChaincodeQueryError      = &rpcError{Code: -32003, Message: "Query failure", Data: "Chaincode query has failed."}
+	ChaincodeDestroyError    = &rpcError{Code: -32005, Message: "Destroy failure", Data: "Chaincode deployment has failed."}
 )
 
 // SetOpenchainServer is a middleware function that sets the pointer to the
@@ -1105,152 +1106,6 @@ func (s *ServerOpenchainREST) Query(rw web.ResponseWriter, req *web.Request) {
 	}
 }
 
-// Upgrade first builds the chaincode package and subsequently upgrades it on the
-// blockchain.
-func (s *ServerOpenchainREST) Upgrade(rw web.ResponseWriter, req *web.Request) {
-	restLogger.Info("REST upgrading chaincode...")
-
-	// Decode the incoming JSON payload
-	var spec pb.ChaincodeSpec
-	err := jsonpb.Unmarshal(req.Body, &spec)
-
-	// Check for proper JSON syntax
-	if err != nil {
-		// Unmarshall returns a " character around unrecognized fields in the case
-		// of a schema validation failure. These must be replaced with a ' character.
-		// Otherwise, the returned JSON is invalid.
-		errVal := strings.Replace(err.Error(), "\"", "'", -1)
-
-		// Client must supply payload
-		if err == io.EOF {
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(rw, "{\"Error\": \"Payload must contain a ChaincodeSpec.\"}")
-			restLogger.Error("{\"Error\": \"Payload must contain a ChaincodeSpec.\"}")
-		} else {
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(rw, "{\"Error\": \"%s\"}", errVal)
-			restLogger.Error(fmt.Sprintf("{\"Error\": \"%s\"}", errVal))
-		}
-
-		return
-	}
-
-	// Currently we cannot test upgrade in dev mode
-	if viper.GetString("chaincode.mode") == chaincode.DevModeUserRunsChaincode {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "{\"Error\": \"Upgrade cannot be done in development mode.\"}")
-		restLogger.Error("{\"Error\": \"Upgrade cannot be done in development mode.\"}")
-
-		return
-	}
-
-	// Check that the ChaincodeID is not nil.
-	if spec.ChaincodeID == nil {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "{\"Error\": \"Payload must contain a ChaincodeID.\"}")
-		restLogger.Error("{\"Error\": \"Payload must contain a ChaincodeID.\"}")
-
-		return
-	}
-
-	// Check that the Chaincode path is not left blank.
-	if spec.ChaincodeID.Path == "" {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "{\"Error\": \"Chaincode path may not be blank.\"}")
-		restLogger.Error("{\"Error\": \"Chaincode path may not be blank.\"}")
-
-		return
-	}
-
-	// Check that the Chaincode path is not left blank.
-	if spec.ChaincodeID.Parent == "" {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "{\"Error\": \"Chaincode parent may not be blank.\"}")
-		restLogger.Error("{\"Error\": \"Chaincode parent may not be blank.\"}")
-
-		return
-	}
-
-	// Check that the CtorMsg is not left blank.
-	if (spec.CtorMsg == nil) || (spec.CtorMsg.Function == "") {
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "{\"Error\": \"Payload must contain a CtorMsg with a Chaincode function name.\"}")
-		restLogger.Error("{\"Error\": \"Payload must contain a CtorMsg with a Chaincode function name.\"}")
-
-		return
-	}
-
-	// If security is enabled, add client login token
-	if viper.GetBool("security.enabled") {
-		chaincodeUsr := spec.SecureContext
-		if chaincodeUsr == "" {
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(rw, "{\"Error\": \"Must supply username for chaincode when security is enabled.\"}")
-			restLogger.Error("{\"Error\": \"Must supply username for chaincode when security is enabled.\"}")
-
-			return
-		}
-
-		// Retrieve the REST data storage path
-		// Returns /var/hyperledger/production/client/
-		localStore := getRESTFilePath()
-
-		// Check if the user is logged in before sending transaction
-		if _, err := os.Stat(localStore + "loginToken_" + chaincodeUsr); err == nil {
-			restLogger.Info("Local user '%s' is already logged in. Retrieving login token.\n", chaincodeUsr)
-
-			// Read in the login token
-			token, err := ioutil.ReadFile(localStore + "loginToken_" + chaincodeUsr)
-			if err != nil {
-				rw.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(rw, "{\"Error\": \"Fatal error -- %s\"}", err)
-				panic(fmt.Errorf("Fatal error when reading client login token: %s\n", err))
-			}
-
-			// Add the login token to the chaincodeSpec
-			spec.SecureContext = string(token)
-
-			// If privacy is enabled, mark chaincode as confidential
-			if viper.GetBool("security.privacy") {
-				spec.ConfidentialityLevel = pb.ConfidentialityLevel_CONFIDENTIAL
-			}
-		} else {
-			// Check if the token is not there and fail
-			if os.IsNotExist(err) {
-				rw.WriteHeader(http.StatusUnauthorized)
-				fmt.Fprintf(rw, "{\"Error\": \"User not logged in. Use the '/registrar' endpoint to obtain a security token.\"}")
-				restLogger.Error("{\"Error\": \"User not logged in. Use the '/registrar' endpoint to obtain a security token.\"}")
-
-				return
-			}
-			// Unexpected error
-			rw.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(rw, "{\"Error\": \"Fatal error -- %s\"}", err)
-			panic(fmt.Errorf("Fatal error when checking for client login token: %s\n", err))
-		}
-	}
-
-	// Deploy the ChaincodeSpec
-	chaincodeDeploymentSpec, err := s.devops.Upgrade(context.Background(), &spec)
-	if err != nil {
-		// Replace " characters with '
-		errVal := strings.Replace(err.Error(), "\"", "'", -1)
-
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, "{\"Error\": \"%s\"}", errVal)
-		restLogger.Error(fmt.Sprintf("{\"Error\": \"Deploying Chaincode -- %s\"}", errVal))
-
-		return
-	}
-
-	// Clients will need the chaincode name in order to invoke or query it
-	chainID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
-
-	rw.WriteHeader(http.StatusOK)
-	fmt.Fprintf(rw, "{\"OK\": \"Successfully upgraded chainCode.\",\"message\":\""+chainID+"\"}")
-	restLogger.Info("Successfuly upgraded chainCode: " + chainID + ".\n")
-}
-
 // ProcessChaincode implements JSON RPC 2.0 specification for chaincode deploy, invoke, and query.
 func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.Request) {
 	restLogger.Info("REST processing chaincode request...")
@@ -1258,31 +1113,17 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 	// Read in the incoming request payload
 	reqBody, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		// Format the error appropriately
-		error := formatRPCError(InternalError.Code, InternalError.Message, "Internal JSON-RPC error when reading request body.")
-		// Produce correctly formatted JSON RPC 2.0 response
-		response := formatRPCResponse(error, nil)
-		jsonResponse, _ := json.Marshal(response)
-
-		rw.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(rw, string(jsonResponse))
+		writeErrorToClient(rw, http.StatusInternalServerError,
+			formatRPCError(InternalError.Code, InternalError.Message, "Internal JSON-RPC error when reading request body."), nil)
 		restLogger.Error("Internal JSON-RPC error when reading request body.")
-
 		return
 	}
 
 	// Incoming request body may not be empty, client must supply request payload
 	if string(reqBody) == "" {
-		// Format the error appropriately
-		error := formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Client must supply a payload for chaincode requests.")
-		// Produce correctly formatted JSON RPC 2.0 response
-		response := formatRPCResponse(error, nil)
-		jsonResponse, _ := json.Marshal(response)
-
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, string(jsonResponse))
+		writeErrorToClient(rw, http.StatusBadRequest,
+			formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Client must supply a payload for chaincode requests."), nil)
 		restLogger.Error("Client must supply a payload for chaincode requests.")
-
 		return
 	}
 
@@ -1293,16 +1134,9 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 	// error here if the incoming JSON is invalid (e.g. missing brace or comma).
 	err = json.Unmarshal(reqBody, &requestPayload)
 	if err != nil {
-		// Format the error appropriately
-		error := formatRPCError(ParseError.Code, ParseError.Message, fmt.Sprintf("Error unmarshalling chaincode request payload: %s", err))
-		// Produce correctly formatted JSON RPC 2.0 response
-		response := formatRPCResponse(error, nil)
-		jsonResponse, _ := json.Marshal(response)
-
-		rw.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(rw, string(jsonResponse))
+		writeErrorToClient(rw, http.StatusBadRequest,
+			formatRPCError(ParseError.Code, ParseError.Message, fmt.Sprintf("Error unmarshalling chaincode request payload: %s", err)), nil)
 		restLogger.Error(fmt.Sprintf("Error unmarshalling chaincode request payload: %s", err))
-
 		return
 	}
 
@@ -1314,7 +1148,6 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 	// Response object to be returned. As such, the Client would not be aware of
 	// any errors (like e.g. "Invalid params","Internal error").
 	//
-
 	notification := false
 	if requestPayload.ID == nil {
 		notification = true
@@ -1324,106 +1157,81 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 	if requestPayload.Jsonrpc == nil {
 		// If the request is not a notification, produce a response.
 		if !notification {
-			// Format the error appropriately
-			error := formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Missing JSON RPC 2.0 version string.")
-			// Produce correctly formatted JSON RPC 2.0 response
-			response := formatRPCResponse(error, requestPayload.ID)
-			jsonResponse, _ := json.Marshal(response)
-
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(rw, string(jsonResponse))
+			writeErrorToClient(rw, http.StatusBadRequest,
+				formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Missing JSON RPC 2.0 version string."), requestPayload.ID)
 		}
 		restLogger.Error("Missing JSON RPC version string.")
-
 		return
-	} else if *(requestPayload.Jsonrpc) != "2.0" {
+	}
+
+	if *(requestPayload.Jsonrpc) != "2.0" {
 		// If the request is not a notification, produce a response.
 		if !notification {
-			// Format the error appropriately
-			error := formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Invalid JSON RPC 2.0 version string. Must be 2.0.")
-			// Produce correctly formatted JSON RPC 2.0 response
-			response := formatRPCResponse(error, requestPayload.ID)
-			jsonResponse, _ := json.Marshal(response)
-
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(rw, string(jsonResponse))
+			writeErrorToClient(rw, http.StatusBadRequest,
+				formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Invalid JSON RPC 2.0 version string. Must be 2.0."), requestPayload.ID)
 		}
 		restLogger.Error("Invalid JSON RPC version string. Must be 2.0.")
 
 		return
 	}
 
-	// Insure that the JSON method string is present and is either deploy, invoke or query
+	// Insure that the JSON method string is present and is either deploy, upgrade, destroy, invoke, or query
 	if requestPayload.Method == nil {
 		// If the request is not a notification, produce a response.
 		if !notification {
-			// Format the error appropriately
-			error := formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Missing JSON RPC 2.0 method string.")
-			// Produce correctly formatted JSON RPC 2.0 response
-			response := formatRPCResponse(error, requestPayload.ID)
-			jsonResponse, _ := json.Marshal(response)
-
-			rw.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(rw, string(jsonResponse))
+			writeErrorToClient(rw, http.StatusBadRequest,
+				formatRPCError(InvalidRequest.Code, InvalidRequest.Message, "Missing JSON RPC 2.0 method string."), requestPayload.ID)
 		}
 		restLogger.Error("Missing JSON RPC 2.0 method string.")
-
-		return
-	} else if (*(requestPayload.Method) != "deploy") && (*(requestPayload.Method) != "invoke") && (*(requestPayload.Method) != "query") {
-		// If the request is not a notification, produce a response.
-		if !notification {
-			// Format the error appropriately
-			error := formatRPCError(MethodNotFound.Code, MethodNotFound.Message, "Requested method does not exist.")
-			// Produce correctly formatted JSON RPC 2.0 response
-			response := formatRPCResponse(error, requestPayload.ID)
-			jsonResponse, _ := json.Marshal(response)
-
-			rw.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(rw, string(jsonResponse))
-		}
-		restLogger.Error("Requested method does not exist.")
-
 		return
 	}
 
-	//
-	// Confirm the requested chaincode method and execute accordingly
-	//
+	if requestPayload.Params == nil {
+		// Payload params field must contain a ChaincodeSpec message
+		// If the request is not a notification, produce a response.
+		if !notification {
+			writeErrorToClient(rw, http.StatusBadRequest,
+				formatRPCError(InvalidParams.Code, InvalidParams.Message, "Client must supply ChaincodeSpec for chaincode request."), requestPayload.ID)
+		}
+		restLogger.Error("Client must supply ChaincodeSpec for chaincode deploy request.")
+		return
+	}
+
+	ccSpec := requestPayload.Params
+	if ccSpec.ChaincodeID == nil {
+		if !notification {
+			writeErrorToClient(rw, http.StatusBadRequest,
+				formatRPCError(InvalidParams.Code, InvalidParams.Message, "Client must supply ChaincodeSpec.ChaincodeID for chaincode request."), requestPayload.ID)
+		}
+		restLogger.Error("Client must supply ChaincodeSpec.ChaincodeID for chaincode request.")
+		return
+	}
+
+	method := *(requestPayload.Method)
+	restLogger.Info("Method in requestPayload for chaincode endpoint = %s", method)
+	if method != "deploy" && method != "invoke" && method != "query" && method != "destroy" && method != "upgrade" {
+		// If the request is not a notification, produce a response.
+		if !notification {
+			writeErrorToClient(rw, http.StatusBadRequest,
+				formatRPCError(MethodNotFound.Code, MethodNotFound.Message, fmt.Sprintf("Requested method [%s] does not exist.", method)), requestPayload.ID)
+		}
+		restLogger.Error("Requested method does not exist.")
+		return
+	}
 
 	// Variable that will hold the execution result
 	var result rpcResult
 
+	//
+	// Confirm the requested chaincode method and execute accordingly
+	//
 	if *(requestPayload.Method) == "deploy" {
-
-		//
-		// Chaincode deployment was requested
-		//
-
-		// Payload params field must contain a ChaincodeSpec message
-		if requestPayload.Params == nil {
-			// If the request is not a notification, produce a response.
-			if !notification {
-				// Format the error appropriately
-				error := formatRPCError(InvalidParams.Code, InvalidParams.Message, "Client must supply ChaincodeSpec for chaincode deploy request.")
-				// Produce correctly formatted JSON RPC 2.0 response
-				response := formatRPCResponse(error, requestPayload.ID)
-				jsonResponse, _ := json.Marshal(response)
-
-				rw.WriteHeader(http.StatusBadRequest)
-				fmt.Fprintf(rw, string(jsonResponse))
-			}
-			restLogger.Error("Client must supply ChaincodeSpec for chaincode deploy request.")
-
-			return
-		}
-
-		// Extract the ChaincodeSpec from the params field
-		deploySpec := requestPayload.Params
-
-		// Process the chaincode deployment request and record the result
-		result = s.processChaincodeDeploy(deploySpec)
+		result = s.processChaincodeDeploy(ccSpec)
+	} else if *(requestPayload.Method) == "destroy" {
+		result = s.processChaincodeDestroy(ccSpec)
+	} else if *(requestPayload.Method) == "upgrade" {
+		result = s.processChaincodeUpgrade(ccSpec)
 	} else {
-
 		//
 		// Chaincode invocation/query was reqested
 		//
@@ -1433,24 +1241,6 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 		// before  proceeding.
 		invokequeryPayload := &pb.ChaincodeInvocationSpec{ChaincodeSpec: requestPayload.Params}
 
-		// Payload params field must contain a ChaincodeSpec message
-		if invokequeryPayload.ChaincodeSpec == nil {
-			// If the request is not a notification, produce a response.
-			if !notification {
-				// Format the error appropriately
-				error := formatRPCError(InvalidParams.Code, InvalidParams.Message, "Client must supply ChaincodeSpec for chaincode invoke or query request.")
-				// Produce correctly formatted JSON RPC 2.0 response
-				response := formatRPCResponse(error, requestPayload.ID)
-				jsonResponse, _ := json.Marshal(response)
-
-				rw.WriteHeader(http.StatusBadRequest)
-				fmt.Fprintf(rw, string(jsonResponse))
-			}
-			restLogger.Error("Client must supply ChaincodeSpec for chaincode invoke or query request.")
-
-			return
-		}
-
 		// Process the chaincode invoke/query request and record the result
 		result = s.processChaincodeInvokeOrQuery(*(requestPayload.Method), invokequeryPayload)
 	}
@@ -1458,7 +1248,6 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 	//
 	// Generate correctly formatted JSON RPC 2.0 response payload
 	//
-
 	response := formatRPCResponse(result, requestPayload.ID)
 	jsonResponse, _ := json.Marshal(response)
 
@@ -1470,6 +1259,136 @@ func (s *ServerOpenchainREST) ProcessChaincode(rw web.ResponseWriter, req *web.R
 	restLogger.Info(fmt.Sprintf("REST sucessfully %s chaincode: %s", *(requestPayload.Method), string(jsonResponse)))
 
 	return
+}
+
+func writeErrorToClient(rw web.ResponseWriter, httpErrorCode int, err rpcResult, id *rpcID) {
+	response := formatRPCResponse(err, id)
+	jsonResponse, _ := json.Marshal(response)
+	rw.WriteHeader(httpErrorCode)
+	fmt.Fprintf(rw, string(jsonResponse))
+}
+
+// processChaincodeDestroy triggers chaincode destroy and returns a result or an error
+func (s *ServerOpenchainREST) processChaincodeDestroy(spec *pb.ChaincodeSpec) rpcResult {
+	restLogger.Info("REST destroying chaincode...")
+	// Currently we cannot test upgrade in dev mode
+	if viper.GetString("chaincode.mode") == chaincode.DevModeUserRunsChaincode {
+		restLogger.Error("Chaincode destroy cannot be done in development mode")
+		return formatRPCError(ChaincodeDeployError.Code, ChaincodeDeployError.Message, "Chaincode destroy cannot be done in development mode")
+	}
+
+	if spec.ChaincodeID.Name == "" {
+		restLogger.Error("Payload must contain a 'ChaincodeID.Name'.")
+		return formatRPCError(InvalidParams.Code, InvalidParams.Message, "Payload must contain a 'ChaincodeID.Name'.")
+	}
+
+	if viper.GetBool("security.enabled") {
+		ptError := s.addSecurityContext(spec)
+		if ptError != nil {
+			return *ptError
+		}
+	}
+
+	res, err := s.devops.Terminate(context.Background(), spec)
+	if err != nil {
+		// Replace " characters with ' within the chaincode response
+		errVal := strings.Replace(err.Error(), "\"", "'", -1)
+		restLogger.Error(fmt.Sprintf("Error when destroying chaincode: %s", errVal))
+		return formatRPCError(ChaincodeDeployError.Code, ChaincodeDeployError.Message, fmt.Sprintf("Error when destroying chaincode: %s", errVal))
+	}
+	txID := string(res.Msg)
+	result := formatRPCOK(txID)
+	restLogger.Info(fmt.Sprintf("Successfuly submitted destroy transaction for chaincode [%s]. TxId = [%s]", spec.ChaincodeID.Name, txID))
+	return result
+}
+
+func (s *ServerOpenchainREST) processChaincodeUpgrade(spec *pb.ChaincodeSpec) rpcResult {
+	// Currently we cannot test upgrade in dev mode
+	if viper.GetString("chaincode.mode") == chaincode.DevModeUserRunsChaincode {
+		restLogger.Error("Upgrade cannot be done in development mode")
+		return formatRPCError(ChaincodeDeployError.Code, ChaincodeDeployError.Message, "Upgrade cannot be done in development mode")
+	}
+
+	if spec.ChaincodeID.Parent == "" {
+		restLogger.Error("Payload must contain a 'ChaincodeID.Parent'.")
+		return formatRPCError(InvalidParams.Code, InvalidParams.Message, "Payload must contain a 'ChaincodeID.Parent'.")
+	}
+
+	if spec.CtorMsg == nil || spec.CtorMsg.Function == "" {
+		return formatRPCError(InvalidParams.Code, InvalidParams.Message, "Payload must contain a CtorMsg with a Chaincode function name'.")
+	}
+
+	if viper.GetBool("security.enabled") {
+		ptError := s.addSecurityContext(spec)
+		if ptError != nil {
+			return *ptError
+		}
+	}
+	chaincodeDeploymentSpec, err := s.devops.Upgrade(context.Background(), spec)
+	if err != nil {
+		// Replace " characters with ' within the chaincode response
+		errVal := strings.Replace(err.Error(), "\"", "'", -1)
+		restLogger.Error(fmt.Sprintf("Error when destroying chaincode: %s", errVal))
+		return formatRPCError(ChaincodeDeployError.Code, ChaincodeDeployError.Message, fmt.Sprintf("Error when upgrading chaincode: %s", errVal))
+	}
+
+	// Clients will need the chaincode name in order to invoke or query it
+	chainID := chaincodeDeploymentSpec.ChaincodeSpec.ChaincodeID.Name
+	result := formatRPCOK(chainID)
+	return result
+}
+
+func (s *ServerOpenchainREST) addSecurityContext(spec *pb.ChaincodeSpec) *rpcResult {
+	// User registrationID must be present inside request payload with security enabled
+	chaincodeUsr := spec.SecureContext
+	if chaincodeUsr == "" {
+		// Format the error appropriately for further processing
+		error := formatRPCError(InvalidParams.Code, InvalidParams.Message, "Must supply username for chaincode when security is enabled.")
+		restLogger.Error("Must supply username for chaincode when security is enabled.")
+		return &error
+	}
+
+	// Retrieve the REST data storage path
+	// Returns /var/hyperledger/production/client/
+	localStore := getRESTFilePath()
+
+	// Check if the user is logged in before sending transaction
+	if _, err := os.Stat(localStore + "loginToken_" + chaincodeUsr); err == nil {
+		// No error returned, therefore token exists so user is already logged in
+		restLogger.Info("Local user '%s' is already logged in. Retrieving login token.", chaincodeUsr)
+		// Read in the login token
+		token, err := ioutil.ReadFile(localStore + "loginToken_" + chaincodeUsr)
+		if err != nil {
+			// Format the error appropriately for further processing
+			error := formatRPCError(InternalError.Code, InternalError.Message, fmt.Sprintf("Fatal error when reading client login token: %s", err))
+			restLogger.Error(fmt.Sprintf("Fatal error when reading client login token: %s", err))
+			return &error
+		}
+
+		// Add the login token to the chaincodeSpec
+		spec.SecureContext = string(token)
+
+		// If privacy is enabled, mark chaincode as confidential
+		if viper.GetBool("security.privacy") {
+			spec.ConfidentialityLevel = pb.ConfidentialityLevel_CONFIDENTIAL
+		}
+	} else {
+		// Check if the token is not there and fail
+		if os.IsNotExist(err) {
+			// Format the error appropriately for further processing
+			error := formatRPCError(MissingRegistrationError.Code, MissingRegistrationError.Message, MissingRegistrationError.Data)
+			restLogger.Error(MissingRegistrationError.Data)
+
+			return &error
+		}
+		// Unexpected error
+		// Format the error appropriately for further processing
+		error := formatRPCError(InternalError.Code, InternalError.Message, fmt.Sprintf("Unexpected fatal error when checking for client login token: %s", err))
+		restLogger.Error(fmt.Sprintf("Unexpected fatal error when checking for client login token: %s", err))
+
+		return &error
+	}
+	return nil
 }
 
 // processChaincodeDeploy triggers chaincode deploy and returns a result or an error
@@ -1873,7 +1792,6 @@ func StartOpenchainRESTServer(server *ServerOpenchain, devops *core.Devops) {
 	router.Post("/devops/deploy", (*ServerOpenchainREST).Deploy)
 	router.Post("/devops/invoke", (*ServerOpenchainREST).Invoke)
 	router.Post("/devops/query", (*ServerOpenchainREST).Query)
-	router.Post("/devops/upgrade", (*ServerOpenchainREST).Upgrade)
 
 	// The /chaincode endpoint which superceedes the /devops endpoint from above
 	router.Post("/chaincode", (*ServerOpenchainREST).ProcessChaincode)

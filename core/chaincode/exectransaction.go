@@ -121,18 +121,39 @@ func Execute(ctxt context.Context, chain *ChaincodeSupport, t *pb.Transaction) (
 		//launch and wait for ready
 		_, _, err = chain.Launch(ctxt, t)
 		if err != nil {
-			chaincodeLogger.Debug("Error...chain.LaunchChaincode:%s", err)
+			chaincodeLogger.Debug("Error in launching chaincoce [%s]: %s", ccName, err)
 			markTxFinish(lgr, t, false)
 			return nil, fmt.Errorf("%s", err)
 		}
-		ccInfo := &ChaincodeInfo{ParentChaincodeName: parentCCName}
+		// Not storing parent name for now. It is not used in any case.
+		// If we store the parent name, we should clear it when the parent chaincode is terminated.
+		ccInfo := &ChaincodeInfo{ParentChaincodeName: "__"}
 		err = putChaincodeInfo(lgr, ccName, ccInfo)
 		if err != nil {
-			chaincodeLogger.Debug("Error...putChaincodeInfo:%s", err)
+			chaincodeLogger.Debug("Error in stroing chaincode info for chaincode [%s]: %s", ccName, err)
 			markTxFinish(lgr, t, false)
 			return nil, err
 		}
 		chaincodeLogger.Debug("Finishing Upgrade Tx")
+		markTxFinish(lgr, t, true)
+	} else if t.Type == pb.Transaction_CHAINCODE_DESTROY {
+		cs, err := extractChaincodeSpec(t)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to extract chaincode spec from tx")
+		}
+		cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: cs}
+		chain.Remove(ctxt, cds)
+		markTxBegin(lgr, t)
+		err = lgr.DeleteFullState(cs.ChaincodeID.Name)
+		if err != nil {
+			markTxFinish(lgr, t, false)
+			return nil, err
+		}
+		err = removeChaincodeInfo(lgr, cs.ChaincodeID.Name)
+		if err != nil {
+			markTxFinish(lgr, t, false)
+			return nil, err
+		}
 		markTxFinish(lgr, t, true)
 	} else if t.Type == pb.Transaction_CHAINCODE_INVOKE || t.Type == pb.Transaction_CHAINCODE_QUERY {
 		//will launch if necessary (and wait for ready)
@@ -271,6 +292,15 @@ func markTxFinish(ledger *ledger.Ledger, t *pb.Transaction, successful bool) {
 	ledger.TxFinished(t.Uuid, successful)
 }
 
+func extractChaincodeSpec(tx *pb.Transaction) (*pb.ChaincodeSpec, error) {
+	cs := &pb.ChaincodeSpec{}
+	err := proto.Unmarshal(tx.Payload, cs)
+	if err != nil {
+		return nil, err
+	}
+	return cs, nil
+}
+
 func extractChaincodeDeploymentSpec(tx *pb.Transaction) (*pb.ChaincodeDeploymentSpec, error) {
 	cds := &pb.ChaincodeDeploymentSpec{}
 	err := proto.Unmarshal(tx.Payload, cds)
@@ -310,6 +340,10 @@ func putChaincodeInfo(lgr *ledger.Ledger, chaincodeName string, info *ChaincodeI
 		return err
 	}
 	return lgr.SetState(chaincodeInfoNameSpace, chaincodeName, buf)
+}
+
+func removeChaincodeInfo(lgr *ledger.Ledger, chaincodeName string) error {
+	return lgr.DeleteState(chaincodeInfoNameSpace, chaincodeName)
 }
 
 func constructChaincodeBytesKey(chaincodeName string) string {

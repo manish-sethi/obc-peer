@@ -266,6 +266,7 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 		if nil != err {
 			return nil, err
 		}
+		//parentCDS, err := fetchChaincodeDeploymentSpec(spec.ChaincodeID.Parent)
 		devopsLogger.Debug("Creating secure transaction %s", transID)
 		tx, err = sec.NewChaincodeUpgradeTransaction(chaincodeDeploymentSpec, transID)
 		if nil != err {
@@ -286,7 +287,11 @@ func (d *Devops) Upgrade(ctx context.Context, spec *pb.ChaincodeSpec) (*pb.Chain
 	return chaincodeDeploymentSpec, err
 }
 
-// Terminate termiates the supplied chaincode 
+func fetchChaincodeDeploymentSpec(chaincodeID string) (*pb.ChaincodeDeploymentSpec, error) {
+	return chaincode.GetChain(chaincode.DefaultChain).FetchChaincodeDeploymentSpec(chaincodeID)
+}
+
+// Terminate termiates the supplied chaincode
 func (d *Devops) Terminate(ctx context.Context, chaincodeSpec *pb.ChaincodeSpec) (*pb.Response, error) {
 	if chaincodeSpec.ChaincodeID.Name == "" {
 		return nil, fmt.Errorf("name not given for terminate")
@@ -307,10 +312,10 @@ func (d *Devops) Terminate(ctx context.Context, chaincodeSpec *pb.ChaincodeSpec)
 			return nil, err
 		}
 		devopsLogger.Debug("Creating secure terminate transaction %s", uuid)
-		transaction, err = sec.NewChaincodeTerminate(chaincodeSpec, uuid)
+		transaction, err = sec.NewChaincodeDestroy(chaincodeSpec, uuid)
 	} else {
 		devopsLogger.Debug("Creating terminate transaction (%s)", uuid)
-		transaction, err = pb.NewChaincodeTerminate(chaincodeSpec, uuid)
+		transaction, err = pb.NewChaincodeDestroy(chaincodeSpec, uuid)
 	}
 	if err != nil {
 		return nil, err

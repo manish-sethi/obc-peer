@@ -376,7 +376,6 @@ func (chaincodeSupport *ChaincodeSupport) Remove(context context.Context, cds *p
 	return err
 }
 
-
 func (chaincodeSupport *ChaincodeSupport) removeFromChaincodeSupport(chaincode string) error {
 	chaincodeSupport.runningChaincodes.Lock()
 	if _, ok := chaincodeSupport.chaincodeHasBeenLaunched(chaincode); !ok {
@@ -459,30 +458,9 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, t *pb.
 	// See issue #710
 
 	if t.Type != pb.Transaction_CHAINCODE_DEPLOY && t.Type != pb.Transaction_CHAINCODE_UPGRADE {
-		ledger, ledgerErr := ledger.GetLedger()
-		if ledgerErr != nil {
-			return cID, cMsg, fmt.Errorf("Failed to get handle to ledger (%s)", ledgerErr)
-		}
-
-		//hopefully we are restarting from existing image and the deployed transaction exists
-		depTx, ledgerErr = ledger.GetTransactionByUUID(chaincode)
-		if ledgerErr != nil {
-			return cID, cMsg, fmt.Errorf("Could not get deployment transaction for %s - %s", chaincode, ledgerErr)
-		}
-		if depTx == nil {
-			return cID, cMsg, fmt.Errorf("deployment transaction does not exist for %s", chaincode)
-		}
-		if nil != chaincodeSupport.secHelper {
-			var err error
-			depTx, err = chaincodeSupport.secHelper.TransactionPreExecution(depTx)
-			// Note that t is now decrypted and is a deep clone of the original input t
-			if nil != err {
-				return cID, cMsg, fmt.Errorf("failed tx preexecution%s - %s", chaincode, err)
-			}
-		}
-		err := proto.Unmarshal(depTx.Payload, cds)
+		cds, err = chaincodeSupport.FetchChaincodeDeploymentSpec(chaincode)
 		if err != nil {
-			return cID, cMsg, fmt.Errorf("failed to unmarshal deployment transactions for %s - %s", chaincode, err)
+			return cID, cMsg, fmt.Errorf("Error: (%s)", err)
 		}
 	}
 
@@ -514,6 +492,35 @@ func (chaincodeSupport *ChaincodeSupport) Launch(context context.Context, t *pb.
 	chaincodeLog.Debug("LaunchChaincode complete")
 
 	return cID, cMsg, err
+}
+
+func (chaincodeSupport *ChaincodeSupport) FetchChaincodeDeploymentSpec(chaincodeID string) (*pb.ChaincodeDeploymentSpec, error) {
+	ledger, ledgerErr := ledger.GetLedger()
+	if ledgerErr != nil {
+		return nil, fmt.Errorf("Failed to get handle to ledger (%s)", ledgerErr)
+	}
+	//hopefully we are restarting from existing image and the deployed transaction exists
+	depTx, ledgerErr := ledger.GetTransactionByUUID(chaincodeID)
+	if ledgerErr != nil {
+		return nil, fmt.Errorf("Could not fetch deployment transaction for %s - %s", chaincodeID, ledgerErr)
+	}
+	if depTx == nil {
+		return nil, fmt.Errorf("deployment transaction does not exist for %s", chaincodeID)
+	}
+	if nil != chaincodeSupport.secHelper {
+		var err error
+		depTx, err = chaincodeSupport.secHelper.TransactionPreExecution(depTx)
+		// Note that t is now decrypted and is a deep clone of the original input t
+		if nil != err {
+			return nil, fmt.Errorf("failed tx preexecution%s - %s", chaincodeID, err)
+		}
+	}
+	cds := &pb.ChaincodeDeploymentSpec{}
+	err := proto.Unmarshal(depTx.Payload, cds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal deployment transactions for %s - %s", chaincodeID, err)
+	}
+	return cds, nil
 }
 
 // getSecHelper returns the security help set from NewChaincodeSupport

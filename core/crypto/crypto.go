@@ -44,8 +44,8 @@ type Client interface {
 	// NewChaincodeQuery is used to query chaincode's functions.
 	NewChaincodeQuery(chaincodeInvocation *obc.ChaincodeInvocationSpec, uuid string) (*obc.Transaction, error)
 
-	// NewChaincodeTerminate is used to terminate a chaincode
-	NewChaincodeTerminate(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error)
+	// NewChaincodeDestroy is used to destroy a chaincode
+	NewChaincodeDestroy(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error)
 
 	// DecryptQueryResult is used to decrypt the result of a query transaction
 	DecryptQueryResult(queryTx *obc.Transaction, result []byte) ([]byte, error)
@@ -58,10 +58,10 @@ type Client interface {
 
 	// GetTCertHandlerFromDER returns a CertificateHandler whose certificate is the one passed
 	GetTCertificateHandlerFromDER(der []byte) (CertificateHandler, error)
-	
+
 	// ReadAttribute reads the attribute with name 'attributeName' from the der encoded x509.Certificate 'tcertder'.
 	ReadAttribute(attributeName string, tcertder []byte) ([]byte, error)
-	
+
 	// GetNextTCert gets next available (not yet used) transaction certificate.
 	GetNextTCert() (tCert, error)
 }

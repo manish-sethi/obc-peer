@@ -157,9 +157,9 @@ func (client *clientImpl) createQueryTx(chaincodeInvocation *obc.ChaincodeInvoca
 	return tx, nil
 }
 
-func (client *clientImpl) createTerminateTx(chaincodeSpec *obc.ChaincodeSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+func (client *clientImpl) createDestroyTx(chaincodeSpec *obc.ChaincodeSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
 	// Create a new transaction
-	tx, err := obc.NewChaincodeTerminate(chaincodeSpec, uuid)
+	tx, err := obc.NewChaincodeDestroy(chaincodeSpec, uuid)
 	if err != nil {
 		client.error("Failed creating new transaction [%s].", err.Error())
 		return nil, err
@@ -325,11 +325,11 @@ func (client *clientImpl) newChaincodeQueryUsingTCert(chaincodeInvocation *obc.C
 	return tx, nil
 }
 
-func (client *clientImpl) newChaincodeTerminateUsingTCert(chaincodeSpec *obc.ChaincodeSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
+func (client *clientImpl) newChaincodeDestroyUsingTCert(chaincodeSpec *obc.ChaincodeSpec, uuid string, tCert tCert, nonce []byte) (*obc.Transaction, error) {
 	// Create a new transaction
-	tx, err := client.createTerminateTx(chaincodeSpec, uuid, nonce)
+	tx, err := client.createDestroyTx(chaincodeSpec, uuid, nonce)
 	if err != nil {
-		client.error("Failed creating new terminate transaction [%s].", err.Error())
+		client.error("Failed creating new destroy transaction [%s].", err.Error())
 		return nil, err
 	}
 
@@ -488,11 +488,11 @@ func (client *clientImpl) newChaincodeQueryUsingECert(chaincodeInvocation *obc.C
 	return tx, nil
 }
 
-func (client *clientImpl) newChaincodeTerminateUsingECert(chaincodeSpec *obc.ChaincodeSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
+func (client *clientImpl) newChaincodeDestroyUsingECert(chaincodeSpec *obc.ChaincodeSpec, uuid string, nonce []byte) (*obc.Transaction, error) {
 	// Create a new transaction
-	tx, err := client.createTerminateTx(chaincodeSpec, uuid, nonce)
+	tx, err := client.createDestroyTx(chaincodeSpec, uuid, nonce)
 	if err != nil {
-		client.error("Failed creating new terminate transaction [%s].", err.Error())
+		client.error("Failed creating new destroy transaction [%s].", err.Error())
 		return nil, err
 	}
 
@@ -524,6 +524,7 @@ func (client *clientImpl) newChaincodeTerminateUsingECert(chaincodeSpec *obc.Cha
 
 	return tx, nil
 }
+
 // CheckTransaction is used to verify that a transaction
 // is well formed with the respect to the security layer
 // prescriptions. To be used for internal verifications.

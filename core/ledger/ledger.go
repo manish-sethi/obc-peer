@@ -223,6 +223,11 @@ func (ledger *Ledger) CopyState(sourceChaincodeID string, destChaincodeID string
 	return ledger.state.CopyState(sourceChaincodeID, destChaincodeID)
 }
 
+// DeleteFullState deletes all the key-values for a given chaincodeID
+func (ledger *Ledger) DeleteFullState(chaincodeID string) error {
+	return ledger.state.DeleteFullState(chaincodeID)
+}
+
 // GetStateMultipleKeys returns the values for the multiple keys.
 // This method is mainly to amortize the cost of grpc communication between chaincode shim peer
 func (ledger *Ledger) GetStateMultipleKeys(chaincodeID string, keys []string, committed bool) ([][]byte, error) {

@@ -21,6 +21,7 @@ package crypto
 
 import (
 	"crypto/x509"
+
 	"github.com/hyperledger/fabric/core/crypto/utils"
 )
 

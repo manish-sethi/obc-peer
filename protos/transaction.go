@@ -21,6 +21,7 @@ package protos
 
 import (
 	"fmt"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/core/util"
 )
@@ -138,9 +139,9 @@ func NewChaincodeExecute(chaincodeInvocationSpec *ChaincodeInvocationSpec, uuid 
 }
 
 // NewChaincodeTerminate is used to terminate a chaincode.
-func NewChaincodeTerminate(chaincodeSpec *ChaincodeSpec, uuid string) (*Transaction, error) {
+func NewChaincodeDestroy(chaincodeSpec *ChaincodeSpec, uuid string) (*Transaction, error) {
 	transaction := new(Transaction)
-	transaction.Type = Transaction_CHAINCODE_TERMINATE
+	transaction.Type = Transaction_CHAINCODE_DESTROY
 	transaction.Uuid = uuid
 	transaction.Timestamp = util.CreateUtcTimestamp()
 	cID := chaincodeSpec.GetChaincodeID()

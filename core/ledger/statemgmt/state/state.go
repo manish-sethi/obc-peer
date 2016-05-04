@@ -214,6 +214,25 @@ func (state *State) CopyState(sourceChaincodeID string, destChaincodeID string) 
 	return nil
 }
 
+// DeleteFullState deletes all the key-values for a given chaincodeID
+func (state *State) DeleteFullState(chaincodeID string) error {
+	logger.Debug("Removing state for chaincode [%s]", chaincodeID)
+	itr, err := state.GetRangeScanIterator(chaincodeID, "", "", false)
+	defer itr.Close()
+	if err != nil {
+		return err
+	}
+	for itr.Next() {
+		k, _ := itr.GetKeyValue()
+		err := state.Delete(chaincodeID, k)
+		if err != nil {
+			return err
+		}
+	}
+	logger.Debug("Removed state for chaincode [%s]", chaincodeID)
+	return nil
+}
+
 // GetMultipleKeys returns the values for the multiple keys.
 func (state *State) GetMultipleKeys(chaincodeID string, keys []string, committed bool) ([][]byte, error) {
 	var values [][]byte

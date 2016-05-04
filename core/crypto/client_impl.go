@@ -122,8 +122,8 @@ func (client *clientImpl) NewChaincodeQuery(chaincodeInvocation *obc.ChaincodeIn
 	return client.newChaincodeQueryUsingTCert(chaincodeInvocation, uuid, tCertHandler, nil)
 }
 
-// NewChaincodeTerminate is used to terminate a chaincode
-func (client *clientImpl) NewChaincodeTerminate(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error) {
+// NewChaincodeDestroy is used to destroy a chaincode
+func (client *clientImpl) NewChaincodeDestroy(chaincodeSpec *obc.ChaincodeSpec, uuid string) (*obc.Transaction, error) {
 	// Verify that the client is initialized
 	if !client.isInitialized {
 		return nil, utils.ErrNotInitialized
@@ -137,7 +137,7 @@ func (client *clientImpl) NewChaincodeTerminate(chaincodeSpec *obc.ChaincodeSpec
 	}
 
 	// Create Transaction
-	return client.newChaincodeTerminateUsingTCert(chaincodeSpec, uuid, tCertHandler, nil)
+	return client.newChaincodeDestroyUsingTCert(chaincodeSpec, uuid, tCertHandler, nil)
 }
 
 // GetEnrollmentCertHandler returns a CertificateHandler whose certificate is the enrollment certificate
